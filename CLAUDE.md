@@ -5,8 +5,8 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**M1 · Sync spike — not started.**
-Read `handoffs/DECISIONS.md`, then `handoffs/02-dev-plan.md`. Nothing else is needed to resume.
+**M2 · Theory + chart model — not started.**
+Read `handoffs/DECISIONS.md`, then `handoffs/M1-sync.md`. It names the parts of `02-dev-plan.md` that M2 needs.
 
 ## Session protocol (keeps context small)
 
@@ -25,5 +25,8 @@ Read `handoffs/DECISIONS.md`, then `handoffs/02-dev-plan.md`. Nothing else is ne
 
 ## Layout
 
+- `apps/web` — the PWA (Vite + React). `apps/worker` — Cloudflare Worker: serves the PWA and `/api/*` (D-23)
+- `packages/theory`, `packages/model` — pure TS packages (M2)
+- Commands: `pnpm dev`, `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm ship` (deploy), `pnpm tail` (live device logs)
 - `design/sketchbook.html` — approved design source (published as an artifact; URL in 01-design.md)
 - `handoffs/` — stage handoffs, decision log, template (see `handoffs/README.md`)

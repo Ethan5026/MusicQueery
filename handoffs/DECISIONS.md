@@ -55,6 +55,21 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   M4 Shell + Stand · M5 Live wiring + Lead sheet · M6 Backing tracks · M7 Listening live + Predicted ·
   M8 Map, Coach, polish. Exit criteria in `handoffs/02-dev-plan.md`.
 
+- **D-23** (M1, supersedes D-14's "Cloudflare Pages" and D-17's separate Worker) Cloudflare now creates Pages projects as
+  Workers, so one Worker (`apps/worker`, name `musicqueery`) serves the PWA as static assets and the API under `/api/*`,
+  same origin: https://musicqueery.ethangruening.workers.dev. Deployed from the dev machine with `pnpm ship`, not Git integration.
+- **D-24** (M1, SP1) Spotify Authorization Code + PKCE runs in the Home Screen app itself: the redirect comes back into the
+  standalone app with its storage intact, and login survives a force-quit. No token broker.
+- **D-25** (M1, SP2) Spotify dev mode (since 2026-02): owner needs Premium, at most 5 allow-listed users; refresh tokens expire
+  6 months after the first login; player endpoints are available. `/me/player` `timestamp` is when the playing device last
+  reported; between reports the server extrapolates `progress_ms`.
+- **D-26** (M1, refines D-03) SpotifyClock: RTT/2 correction, origin = median of the lowest-RTT third of samples since the last
+  jump; a new `timestamp` re-anchors at once ('resync'). After a fresh start (seek, skip, or play from a new position) reports
+  run ahead of the audio until the device resyncs, so a per-device start bias is learned from those resyncs and applied until
+  the next one (Fire TV ≈ −310 ms). Measured: median |drift| 2.9 ms, p95 13.9 ms over 11 min.
+- **D-27** (M1, SP8) Screen Wake Lock works in the standalone PWA on iOS 27; no silent-video fallback.
+- **D-28** (M1) The user mostly plays through Fire TV devices (Spotify Connect). Sync acceptance tests (M5) run on a Fire TV.
+
 ## Pending
 
 (none)
