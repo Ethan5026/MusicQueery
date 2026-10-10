@@ -1,0 +1,848 @@
+<title>MusicQueery Sketchbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Kalam:wght@400;700&family=Noto+Music&display=swap">
+<style>
+/* Layout: a marked-up design board. Sticky transport bar on top, then boards that pair a device with margin notes, the way a teacher annotates a lead sheet. */
+:root{
+  /* Color: manuscript paper, ink, saxophone brass, steel for "next", rust for key changes */
+  --paper:#eef0ea; --screen:#f7f8f3; --surface:#ffffff; --surface-2:#e4e7de;
+  --ink:#15171c; --ink-2:#555b64; --rule:#cfd3c8;
+  --brass:#8f5c08; --brass-soft:#f0e1c0;
+  --steel:#2d5a86; --steel-soft:#dbe5ef;
+  --alert:#ad4128; --alert-soft:#f5ddd4; --ok:#2c7a4c; --warn:#a36a00;
+  --bezel:#1f2126; --island:#000;
+  --kb-white:#ffffff; --kb-black:#24272d; --kb-line:#b8bcb2; --kb-in:#f0d595; --kb-in-black:#9c7428;
+  --kb-dot:#7a4d06; --kb-guide:#22507c; --kb-dot-text:#ffffff;
+  --band-l:.84; --band-c:.085;
+  /* Type: hand-lettered chord symbols (Real Book), a sturdy grotesk for UI, condensed labels, mono for time and tempo */
+  --f-chord:"Kalam","Segoe Print","Bradley Hand",cursive;
+  --f-ui:"Barlow","Segoe UI",system-ui,sans-serif;
+  --f-label:"Barlow Condensed","Arial Narrow","Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --f-acc:"Noto Music","Segoe UI Symbol","Apple Symbols",serif;
+  --z-p:.8; --z-l:.92;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0d1015; --screen:#090c11; --surface:#141922; --surface-2:#1c222d;
+    --ink:#edf0f4; --ink-2:#9aa3b0; --rule:#283041;
+    --brass:#e3b14b; --brass-soft:#3a2f18;
+    --steel:#88b7e6; --steel-soft:#172739;
+    --alert:#f1906f; --alert-soft:#3e2219; --ok:#6fcf97; --warn:#e9b44c;
+    --bezel:#2c3038; --island:#000;
+    --kb-white:#dde1e8; --kb-black:#0b0d11; --kb-line:#5b6271; --kb-in:#d9b468; --kb-in-black:#8a6624;
+    --kb-dot:#6a4507; --kb-guide:#1c4d7e; --kb-dot-text:#ffffff;
+    --band-l:.40; --band-c:.075;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0d1015; --screen:#090c11; --surface:#141922; --surface-2:#1c222d;
+  --ink:#edf0f4; --ink-2:#9aa3b0; --rule:#283041;
+  --brass:#e3b14b; --brass-soft:#3a2f18;
+  --steel:#88b7e6; --steel-soft:#172739;
+  --alert:#f1906f; --alert-soft:#3e2219; --ok:#6fcf97; --warn:#e9b44c;
+  --bezel:#2c3038; --island:#000;
+  --kb-white:#dde1e8; --kb-black:#0b0d11; --kb-line:#5b6271; --kb-in:#d9b468; --kb-in-black:#8a6624;
+  --kb-dot:#6a4507; --kb-guide:#1c4d7e; --kb-dot-text:#ffffff;
+  --band-l:.40; --band-c:.075;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:clamp(16px,3vw,32px);padding-block:0 64px}
+h1,h2,h3{text-wrap:balance;margin:0}
+p{margin:0}
+.eyebrow{font-family:var(--f-label);font-weight:600;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+.acc{font-family:var(--f-acc);font-weight:400;font-size:.82em;line-height:0;position:relative;top:-.02em}
+
+/* ---------- masthead ---------- */
+.mast{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;padding-block:40px 24px;border-bottom:1px solid var(--rule)}
+.mast h1{font-family:var(--f-chord);font-weight:700;font-size:clamp(40px,6vw,64px);line-height:1}
+.mast h1 .q{font-size:.5em;vertical-align:.7em;font-weight:400;color:var(--brass);margin-left:.08em}
+.mast .lede{max-width:62ch;color:var(--ink-2);margin-top:10px;font-size:16px}
+.status{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-label);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:14px;padding:6px 12px;border-radius:999px;background:var(--brass-soft);color:var(--brass);white-space:nowrap}
+.status i{width:8px;height:8px;border-radius:50%;background:currentColor}
+@media (max-width:640px){.mast{grid-template-columns:1fr}}
+
+/* ---------- transport ---------- */
+.transport{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--paper);border-bottom:1px solid var(--rule);padding-block:10px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:10px;padding:3px;background:var(--surface);gap:2px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{font-family:var(--f-label);font-weight:600;font-size:15px;letter-spacing:.02em;padding:5px 12px;border-radius:7px;cursor:pointer;color:var(--ink-2);white-space:nowrap}
+.seg input:checked+label{background:var(--ink);color:var(--paper)}
+.seg input:focus-visible+label{outline:2px solid var(--steel);outline-offset:2px}
+.tgroup{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tgroup>.eyebrow{font-size:12px}
+.btn{font:600 15px var(--f-label);letter-spacing:.03em;border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:7px 14px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--rule)}
+.btn:focus-visible{outline:2px solid var(--steel);outline-offset:2px}
+.scrub{display:flex;align-items:center;gap:10px;flex:1 1 260px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--brass)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.scrub .mono{font-size:13px;color:var(--ink-2);white-space:nowrap}
+
+/* ---------- sections & boards ---------- */
+section.block{padding-block:48px 8px;display:grid;gap:20px}
+.block-h{display:grid;gap:6px;max-width:72ch}
+.block-h h2{font-family:var(--f-label);font-weight:700;font-size:30px;letter-spacing:.01em;line-height:1.1}
+.block-h p{color:var(--ink-2)}
+.board{display:grid;grid-template-columns:auto minmax(0,1fr);gap:28px 40px;align-items:start}
+.board.two{grid-template-columns:repeat(2,auto) minmax(0,1fr)}
+@media (max-width:1100px){.board.two{grid-template-columns:repeat(2,auto)}.board.two .notes{grid-column:1/-1}}
+@media (max-width:900px){.board,.board.two{grid-template-columns:minmax(0,1fr)}.board .dev-cell{justify-self:center}}
+.dev-cell{display:grid;gap:10px;justify-items:center}
+.dev-cap{font-family:var(--f-label);font-weight:600;letter-spacing:.08em;text-transform:uppercase;font-size:13px;color:var(--ink-2)}
+.scrollx{overflow-x:auto;max-width:100%;padding-bottom:6px}
+.notes{display:grid;gap:14px;max-width:62ch}
+.notes h3{font-family:var(--f-label);font-weight:700;font-size:22px;line-height:1.15}
+.notes>p{color:var(--ink-2)}
+.notes dl{margin:0;display:grid;gap:12px}
+.notes dt{font-family:var(--f-label);font-weight:700;font-size:16px;letter-spacing:.02em}
+.notes dd{margin:2px 0 0;color:var(--ink-2)}
+
+/* ---------- device frame ---------- */
+.device{zoom:var(--z-p);background:var(--bezel);padding:11px;border-radius:64px;box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 18px 40px -18px rgba(10,14,20,.45);flex:none}
+.device.land{zoom:var(--z-l)}
+@media (max-width:1000px){:root{--z-l:.78}}
+@media (max-width:700px){:root{--z-l:.6;--z-p:.78}}
+.screen{position:relative;width:402px;height:874px;border-radius:53px;overflow:hidden;background:var(--screen);color:var(--ink);font-family:var(--f-ui)}
+.land .screen{width:874px;height:402px}
+.island{position:absolute;background:var(--island);border-radius:20px;z-index:5}
+.port .island{top:11px;left:50%;transform:translateX(-50%);width:124px;height:36px}
+.land .island{left:11px;top:50%;transform:translateY(-50%);width:36px;height:124px}
+.sbar{position:absolute;top:0;left:0;right:0;height:54px;display:flex;justify-content:space-between;align-items:center;padding:6px 34px 0 44px;font:600 16px var(--f-ui);z-index:4}
+.sbar .rt{display:flex;gap:6px;align-items:center;font-size:13px}
+.batt{width:24px;height:12px;border:1.5px solid currentColor;border-radius:4px;position:relative;opacity:.9}
+.batt::after{content:"";position:absolute;inset:1.5px 5px 1.5px 1.5px;background:currentColor;border-radius:1.5px}
+.homebar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:var(--ink);opacity:.85;z-index:4}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:83px;padding:8px 18px 0;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--rule);background:var(--screen)}
+.tabs span{display:grid;justify-items:center;gap:3px;font:600 11px var(--f-label);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.tabs span.on{color:var(--brass)}
+.tabs svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- shared app atoms ---------- */
+.app{position:absolute;inset:58px 0 83px;padding:4px 14px 10px;display:flex;flex-direction:column;gap:9px}
+.app>*{flex-shrink:0}
+.ch{font-family:var(--f-chord);font-weight:700;line-height:1;white-space:nowrap;display:inline-flex;align-items:flex-start}
+.ch .q{font-size:.56em;font-weight:400;margin-left:.04em;margin-top:-.04em}
+.ch .r .acc{font-size:.7em;top:-.38em;margin-left:.02em}
+.ch .q .acc{font-size:.85em}
+.lbl{font:600 11.5px var(--f-label);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.card{background:var(--surface);border-radius:16px;border:1px solid var(--rule)}
+.sync{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--f-label);letter-spacing:.05em;text-transform:uppercase;padding:4px 8px;border-radius:999px;white-space:nowrap}
+.sync i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.sync.ok{color:var(--ok);background:color-mix(in oklab,var(--ok) 14%,transparent)}
+.sync.warn{color:var(--warn);background:color-mix(in oklab,var(--warn) 16%,transparent)}
+.sync.idle{color:var(--ink-2);background:var(--surface-2)}
+.sync.alert{color:var(--alert);background:var(--alert-soft)}
+.src{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--f-label);letter-spacing:.05em;text-transform:uppercase;padding:4px 8px;border-radius:6px;border:1px dashed currentColor;white-space:nowrap}
+.src.exact{color:var(--steel);border-style:solid}
+.src.live{color:var(--warn)}
+.src.pred{color:var(--ink-2)}
+.beats{display:flex;gap:8px}
+.beats i{width:12px;height:12px;border-radius:50%;border:2px solid var(--rule);background:transparent}
+.beats i.on{background:var(--brass);border-color:var(--brass)}
+.beats i.one{border-color:var(--ink-2)}
+.beats i.one.on{border-color:var(--brass)}
+.kb svg{display:block;max-width:100%;height:auto}
+.kw{fill:var(--kb-white);stroke:var(--kb-line);stroke-width:1}
+.kw.in{fill:var(--kb-in)}
+.kbk{fill:var(--kb-black);stroke:var(--kb-black);stroke-width:1}
+.kbk.in{fill:var(--kb-in-black)}
+.kdot{fill:var(--kb-dot);stroke:var(--kb-white);stroke-width:1.2}
+.kdot.g{fill:var(--kb-guide)}
+.ktx{fill:var(--kb-dot-text);font-family:var(--f-mono);font-weight:500;text-anchor:middle;dominant-baseline:central}
+
+/* ---------- Stand (portrait) ---------- */
+.np{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center}
+.art{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,var(--brass) 0%,var(--steel) 100%);display:grid;place-items:center;font:700 11px var(--f-label);letter-spacing:.06em;color:var(--screen)}
+.np-title{font:600 16px var(--f-ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np-sub{font-size:12.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font:500 12px var(--f-mono);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.pbar{position:relative;height:4px;background:var(--surface-2);border-radius:2px}
+.pbar i{position:absolute;left:0;top:0;bottom:0;background:var(--brass);border-radius:2px}
+.pbar b{position:absolute;top:-3px;width:1px;height:10px;background:var(--ink-2);opacity:.5}
+.chips{display:flex;gap:6px;flex-wrap:nowrap;overflow:hidden}
+.chip{display:inline-flex;align-items:baseline;gap:5px;padding:5px 9px;border-radius:8px;background:var(--surface);border:1px solid var(--rule);white-space:nowrap;font-size:13.5px}
+.chip em{font:600 10.5px var(--f-label);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);font-style:normal}
+.chip b{font-weight:600}
+.chip.now{background:var(--brass-soft);border-color:transparent}
+.chip.now b{color:var(--brass)}
+.chip .acc{font-size:.9em}
+.hero{padding:12px 16px 14px;display:grid;gap:4px}
+.hero-top{display:flex;justify-content:space-between;align-items:center}
+.hero-mid{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;min-height:106px}
+.hero-chord .ch{font-size:96px}
+.hero-fn{font:600 15px var(--f-ui);color:var(--ink-2)}
+.hero-fn b{color:var(--ink);font-weight:600}
+.hero-bot{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+.next{padding:10px 12px 12px;display:grid;gap:8px}
+.next ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.next li{background:var(--steel-soft);border-radius:10px;padding:8px 8px 6px;display:grid;gap:2px;min-width:0}
+.next li:first-child{outline:2px solid var(--steel);outline-offset:-2px}
+.next li .ch{font-size:26px;color:var(--ink)}
+.next li .mono{font-size:11px;color:var(--steel)}
+.kc{padding:10px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center}
+.kc .big{font:700 22px var(--f-label);letter-spacing:.01em}
+.kc .big .acc{font-size:.85em}
+.kc .meta{font-size:12.5px;color:var(--ink-2)}
+.kc .meter{grid-column:1/-1;height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.kc .meter i{display:block;height:100%;background:var(--steel)}
+.kc.soon{background:var(--alert-soft);border-color:transparent}
+.kc.soon .meter i{background:var(--alert)}
+.kc.soon .big,.kc.soon .lbl{color:var(--alert)}
+.kc .arrow{font:700 22px var(--f-ui);color:var(--ink-2)}
+.scale{padding:12px 14px;display:grid;gap:8px}
+.scale-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.scale-h b{font:700 22px var(--f-label);letter-spacing:.01em}
+.scale-h span{font-size:13px;color:var(--ink-2)}
+.notes-row{display:flex;gap:4px;flex-wrap:wrap}
+.notes-row span{font:500 13px var(--f-mono);padding:2px 6px;border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
+.notes-row span.t{background:var(--brass-soft);color:var(--brass);font-weight:500}
+.notes-row span.g{background:var(--steel-soft);color:var(--steel)}
+.gt{display:flex;gap:14px;align-items:center;font-size:13px;color:var(--ink-2);flex-wrap:wrap}
+.gt b{font:600 14px var(--f-mono);color:var(--ink)}
+.gt sub{font:600 10px var(--f-label);color:var(--steel);vertical-align:baseline;margin-left:1px}
+
+/* ---------- Lead sheet (landscape) ---------- */
+.lapp{position:absolute;inset:12px 60px 22px;display:grid;grid-template-columns:minmax(0,1fr) 226px;gap:14px}
+.sheet{display:grid;grid-template-rows:auto 1fr;gap:8px;min-width:0}
+.sheet-h{display:flex;gap:10px;align-items:center;min-width:0}
+.sheet-h .t{font:600 15px var(--f-ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sheet-h .sp{flex:1}
+.rows-win{position:relative;height:312px;overflow:hidden;border-top:2px solid var(--ink);border-bottom:2px solid var(--ink)}
+.rows{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:78px;transition:transform .35s ease}
+.lb{position:relative;border-left:1.5px solid var(--ink);border-bottom:1px solid var(--rule);padding:22px 8px 6px;display:flex;align-items:center;gap:10px}
+.lb:nth-child(4n){border-right:1.5px solid var(--ink)}
+.lb.end{border-right:5px double var(--ink)}
+.lb .ch{font-size:34px}
+.lb.split .ch{font-size:26px}
+.lb .num{position:absolute;left:5px;bottom:3px;font:500 10px var(--f-mono);color:var(--ink-2)}
+.lb .reh{position:absolute;left:5px;top:4px;font:700 12px var(--f-label);border:1.5px solid var(--ink);padding:0 4px;border-radius:3px;line-height:1.3}
+.lb .kmark{position:absolute;right:6px;top:4px;font:700 12.5px var(--f-label);color:var(--alert);letter-spacing:.02em}
+.lb .kmark.home{color:var(--ink-2)}
+.lb.past .ch{opacity:.42}
+.lb.cur{background:var(--brass-soft)}
+.lb .ph{position:absolute;top:0;bottom:0;width:2px;background:var(--brass);display:none}
+.lb.cur .ph{display:block}
+.rail{display:grid;align-content:start;gap:8px;border-left:1px solid var(--rule);padding-left:14px;min-width:0}
+.rail .ch.big{font-size:64px}
+.rail .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rail .nx{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2)}
+.rail .nx .ch{font-size:24px;color:var(--ink)}
+.rail .sc{font:700 17px var(--f-label)}
+.rail .fn{font:600 13.5px var(--f-ui);color:var(--ink-2)}
+
+/* ---------- Song map ---------- */
+.map-h{display:grid;gap:2px}
+.map-h h2{font:700 26px var(--f-label)}
+.map-legend{font-size:12.5px;color:var(--ink-2)}
+.sec-ticks{display:grid;grid-template-columns:88px 1fr;gap:10px;font:600 10.5px var(--f-label);letter-spacing:.08em;color:var(--ink-2)}
+.sec-ticks div:last-child{display:grid;grid-template-columns:8fr 8fr 8fr 12fr}
+.mrow{display:grid;grid-template-columns:88px 1fr;gap:10px;align-items:center;cursor:pointer;padding:4px 0;border-radius:8px;background:none;border:0;color:inherit;font:inherit;text-align:left;width:100%}
+.mrow:focus-visible{outline:2px solid var(--steel);outline-offset:2px}
+.mrow .nm{font:600 13px var(--f-ui);line-height:1.15}
+.mrow.on .nm{color:var(--brass)}
+.strip{position:relative;display:flex;height:30px;border-radius:6px;overflow:hidden;gap:1px;background:var(--rule)}
+.strip i{flex:1;background:oklch(var(--band-l) var(--band-c) var(--h));display:grid;place-items:center;font:700 10px var(--f-label);color:var(--ink);overflow:hidden}
+.strip.short{width:calc(4/36*100%)}
+.strip .mk{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--ink);border-radius:2px;box-shadow:0 0 0 2px var(--screen)}
+.keys{padding:12px 14px;display:grid;gap:8px}
+.krow{display:grid;grid-template-columns:22px 92px 1fr 46px;gap:8px;align-items:center;font-size:13.5px}
+.krow .sw{width:18px;height:18px;border-radius:5px;background:oklch(var(--band-l) var(--band-c) var(--h));border:1px solid var(--rule)}
+.krow .bar{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.krow .bar i{display:block;height:100%;background:var(--ink-2)}
+.krow .mono{font-size:12px;color:var(--ink-2);text-align:right}
+.loop{padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center}
+.loop .t{font:600 15px var(--f-ui)}
+.loop .s{font-size:12.5px;color:var(--ink-2)}
+.loop .go{grid-row:1/3;grid-column:2;font:700 13px var(--f-label);letter-spacing:.05em;text-transform:uppercase;background:var(--ink);color:var(--screen);padding:8px 12px;border-radius:9px}
+
+/* ---------- Coach ---------- */
+.lens{display:flex;border:1px solid var(--rule);border-radius:10px;padding:3px;background:var(--surface);gap:2px}
+.lens input{position:absolute;opacity:0;pointer-events:none}
+.lens label{flex:1;text-align:center;font:600 14px var(--f-label);padding:6px 0;border-radius:7px;color:var(--ink-2);cursor:pointer}
+.lens input:checked+label{background:var(--brass);color:var(--screen)}
+.lens input:focus-visible+label{outline:2px solid var(--steel);outline-offset:2px}
+.tip{padding:10px 12px;background:var(--steel-soft);border-color:transparent;font-size:13.5px;line-height:1.4}
+.tip b{color:var(--steel)}
+.ctab{display:grid;gap:0}
+.crow{display:grid;grid-template-columns:30px 86px minmax(0,1fr) 44px;gap:8px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--rule)}
+.crow.hd{font:600 10.5px var(--f-label);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);padding-block:4px}
+.crow .mono{font-size:12px;color:var(--ink-2)}
+.crow .ch{font-size:26px}
+.crow .scn{font:600 14px var(--f-ui);line-height:1.2}
+.crow .fnn{font-size:11.5px;color:var(--ink-2)}
+.crow .land{font:600 14px var(--f-mono);color:var(--steel);text-align:center}
+.crow.on{background:var(--brass-soft);border-radius:8px}
+
+/* ---------- page sections: sources, states, pipeline ---------- */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--rule);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px}
+th,td{text-align:left;padding:12px 16px;vertical-align:top;border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:0}
+th{font:600 12.5px var(--f-label);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);background:var(--surface-2)}
+td:first-child{font-weight:600;white-space:nowrap}
+td .pill{display:inline-block;font:600 11.5px var(--f-label);letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-bottom:4px}
+.pill.g{background:color-mix(in oklab,var(--ok) 15%,transparent);color:var(--ok)}
+.pill.w{background:color-mix(in oklab,var(--warn) 18%,transparent);color:var(--warn)}
+.pill.b{background:var(--steel-soft);color:var(--steel)}
+.callout{border-left:3px solid var(--alert);padding:10px 16px;background:var(--alert-soft);border-radius:0 10px 10px 0;max-width:80ch}
+.callout b{color:var(--alert)}
+
+.states{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.st{padding:16px;display:grid;gap:12px;align-content:start}
+.st h3{font:700 18px var(--f-label);letter-spacing:.02em}
+.st ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.st li{display:grid;gap:4px;font-size:13.5px;color:var(--ink-2)}
+.st li>span:first-child{justify-self:start}
+.empty{display:grid;justify-items:center;text-align:center;gap:8px;padding:18px 10px;border:1.5px dashed var(--rule);border-radius:12px}
+.empty .ch{font-size:48px;color:var(--ink-2)}
+.empty p{font-size:13.5px;color:var(--ink-2);max-width:30ch}
+.set{display:grid;grid-template-columns:1fr auto;gap:8px 12px;font-size:14px;align-items:center}
+.set span:nth-child(even){font:600 13px var(--f-label);letter-spacing:.03em;color:var(--brass);text-align:right}
+
+.pipe{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;counter-reset:none}
+.stage{position:relative;padding:12px 12px 12px;border-radius:12px;border:1px solid var(--rule);background:var(--surface);display:grid;gap:4px;align-content:start}
+.stage .id{font:700 13px var(--f-mono);color:var(--ink-2)}
+.stage .nm{font:700 17px var(--f-label);line-height:1.15}
+.stage .f{font:500 11.5px var(--f-mono);color:var(--steel);word-break:break-all}
+.stage .why{font-size:12.5px;color:var(--ink-2);line-height:1.35}
+.stage.done{background:var(--surface-2)}
+.stage.done .id::after{content:" · done";color:var(--ok)}
+.stage.here{border:2px solid var(--brass);background:var(--brass-soft)}
+.stage.here .id::after{content:" · you are here";color:var(--brass)}
+.anat{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.file{font:13px/1.55 var(--f-mono);background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:14px 16px;overflow-x:auto;white-space:pre;color:var(--ink)}
+.file .c{color:var(--ink-2)}
+.file .h{color:var(--brass);font-weight:500}
+.reads{display:grid;gap:10px;align-content:start}
+.reads ol{margin:0;padding-left:22px;display:grid;gap:8px;color:var(--ink-2)}
+.reads ol b{color:var(--ink);font-family:var(--f-mono);font-weight:500;font-size:13.5px}
+.decide{display:grid;gap:10px;max-width:80ch}
+.decide ol{margin:0;padding-left:22px;display:grid;gap:8px}
+.decide li b{font-weight:600}
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--rule);color:var(--ink-2);font-size:13px}
+@media (prefers-reduced-motion:reduce){.rows{transition:none}}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <div class="eyebrow">Design round 1 · iPhone 17 · Portrait and landscape</div>
+      <h1>MusicQueery<span class="q">sketchbook</span></h1>
+      <p class="lede">A live lead sheet that follows whatever you play on Spotify. It shows the chord you're on, what's coming, the key you're in, the next key change, and what to play over it, transposed for piano, E♭ alto or B♭ tenor.</p>
+    </div>
+    <span class="status"><i></i>Awaiting your approval</span>
+  </header>
+
+  <div class="transport" role="group" aria-label="Sketch controls">
+    <div class="tgroup">
+      <span class="eyebrow">Read as</span>
+      <div class="seg" role="radiogroup" aria-label="Instrument">
+        <input type="radio" name="inst" id="inst-concert" value="concert" checked><label for="inst-concert">Concert · piano</label>
+        <input type="radio" name="inst" id="inst-alto" value="alto"><label for="inst-alto">E<span class="acc">♭</span> alto</label>
+        <input type="radio" name="inst" id="inst-tenor" value="tenor"><label for="inst-tenor">B<span class="acc">♭</span> tenor</label>
+      </div>
+    </div>
+    <div class="tgroup">
+      <button class="btn" id="play" type="button" aria-pressed="false">▶ Play demo</button>
+      <button class="btn ghost" id="reset" type="button">Reset</button>
+    </div>
+    <div class="scrub">
+      <label class="eyebrow" for="scrub">Song</label>
+      <input type="range" id="scrub" min="0" max="268" step="0.05" value="66">
+      <span class="mono" id="scrub-t">1:06 / 4:28</span>
+    </div>
+  </div>
+
+  <!-- ===================== DATA SOURCES ===================== -->
+  <section class="block" aria-labelledby="src-h">
+    <div class="block-h">
+      <span class="eyebrow">Before the screens</span>
+      <h2 id="src-h">What the app knows, and where it comes from</h2>
+      <p>Every screen below is driven by four kinds of data. Only the first comes from Spotify directly.</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>What you see</th><th>Source</th><th>How exact</th></tr></thead>
+        <tbody>
+          <tr><td>Track, play/pause, position</td><td>Spotify Web API (playback on any device) or the Spotify iOS SDK (playback on this phone)</td><td><span class="pill g">Exact</span><br>Polled about once a second and interpolated on the phone between polls. Target: within 150 ms of what you hear.</td></tr>
+          <tr><td>Chords, sections, key changes</td><td>A chord timeline made by analysing the recording's audio, saved per Spotify track ID</td><td><span class="pill b">Exact once analysed</span> <span class="pill w">Live only on first listen</span><br>Look-ahead (Up next, key change countdown) needs a saved timeline.</td></tr>
+          <tr><td>Key, tempo, time signature</td><td>Derived from the same analysis, with a third-party lookup as a fallback</td><td><span class="pill g">Good</span><br>Tempo and key per section, so rubato and modulations are handled.</td></tr>
+          <tr><td>Scales, functions, guide tones</td><td>On-device theory engine</td><td><span class="pill g">Computed</span><br>Calculated from the chords and transposed for your instrument.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="callout"><b>Spotify won't tell us the chords.</b> Spotify closed its Audio Features and Audio Analysis endpoints (key, tempo, sections) to new apps in November 2024, and it has never offered chords. Getting a chord timeline is the hardest problem in this project, so the development plan opens with a spike on it. The sample data in these sketches stands in for that timeline.</p>
+  </section>
+
+  <!-- ===================== STAND ===================== -->
+  <section class="block" aria-labelledby="stand-h">
+    <div class="block-h">
+      <span class="eyebrow">Screen 1 · Portrait</span>
+      <h2 id="stand-h">Stand</h2>
+      <p>The main screen. Prop the phone on the music stand and one glance tells you what this chord is, what's next, and what to play.</p>
+    </div>
+    <div class="board">
+      <div class="dev-cell">
+        <div class="device port"><div class="screen">
+          <div class="island"></div>
+          <div class="sbar"><span>9:41</span><span class="rt">5G <span class="batt"></span></span></div>
+          <div class="app">
+            <header class="np">
+              <div class="art" aria-hidden="true">ATTYA</div>
+              <div style="min-width:0"><div class="np-title">All the Things You Are</div><div class="np-sub">Sample recording · Playing on Spotify</div></div>
+              <span class="sync ok"><i></i>±40 ms</span>
+            </header>
+            <div class="prog"><span id="s-t">1:06</span><div class="pbar" id="s-pbar"><i id="s-fill"></i></div><span id="s-d">4:28</span></div>
+            <div class="chips">
+              <span class="chip"><em>Home</em><b id="s-home">A♭ major</b></span>
+              <span class="chip now"><em>Now</em><b id="s-reg">C major</b></span>
+              <span class="chip"><b class="mono">168</b><em>BPM</em></span>
+              <span class="chip"><b>4/4</b><em>Swing</em></span>
+            </div>
+            <section class="card hero">
+              <div class="hero-top"><span class="lbl" id="s-sec">Sax solo · ch 1</span><span class="src exact">Analysed</span></div>
+              <div class="hero-mid">
+                <div class="hero-chord" id="s-chord"></div>
+              </div>
+              <div class="hero-bot"><span class="hero-fn" id="s-fn"></span><div class="beats" id="s-beats"><i class="one"></i><i></i><i></i><i></i></div></div>
+            </section>
+            <section class="card next"><div class="row" style="display:flex;justify-content:space-between"><span class="lbl">Up next</span><span class="lbl" id="s-bar">Bar 7 / 36</span></div><ol id="s-next"></ol></section>
+            <section class="card kc" id="s-kc"></section>
+            <section class="card scale">
+              <div class="scale-h"><span class="lbl">Play</span><b id="s-scale"></b><span id="s-alt"></span><span class="lbl" id="s-inst" style="margin-left:auto"></span></div>
+              <div class="notes-row" id="s-notes"></div>
+              <div class="kb" id="s-kb"></div>
+              <div class="gt" id="s-gt"></div>
+            </section>
+          </div>
+          <nav class="tabs" aria-label="App tabs">
+            <span class="on"><svg viewBox="0 0 24 24"><path d="M5 4h14v9H5zM8 7h8M8 10h5M12 13v7M8 20h8"/></svg>Stand</span>
+            <span><svg viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h18M9 4v16M15 4v16"/></svg>Map</span>
+            <span><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Coach</span>
+            <span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>Settings</span>
+          </nav>
+          <div class="homebar"></div>
+        </div></div>
+        <span class="dev-cap">402 × 874 pt · iPhone 17</span>
+      </div>
+      <div class="notes">
+        <h3>Read top to bottom, in order of urgency</h3>
+        <p>Press <b>Play demo</b> above to watch it move at the recording's real tempo, or drag the song slider. Switch <b>Read as</b> to see the sax views.</p>
+        <dl>
+          <div><dt>Sync badge</dt><dd>How closely the dashboard tracks Spotify's playhead. Green under 150 ms, amber while it re-locks after a seek or skip.</dd></div>
+          <div><dt>Home and Now</dt><dd>The tune's home key, and the key centre you're in right now. This tune passes through five of them.</dd></div>
+          <div><dt>Current chord</dt><dd>Lettered like a Real Book chart and sized to read from a music stand. The Roman numeral shows its job in the current key, and the dots count beats in the bar. The source tag shows whether the chords come from a saved analysis or are being heard live.</dd></div>
+          <div><dt>Up next</dt><dd>The next four changes with a beat countdown, so a ii–V never surprises you.</dd></div>
+          <div><dt>Key change</dt><dd>Counts down to the next modulation and turns rust-red for the last bar.</dd></div>
+          <div><dt>Play</dt><dd>The suggested scale with a more colourful alternative. Tinted keys are the scale, dots are chord tones, blue dots are the guide tones (3rd and 7th). The bottom line shows how those guide tones move into the next chord by the smallest step.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== LEAD SHEET ===================== -->
+  <section class="block" aria-labelledby="sheet-h">
+    <div class="block-h">
+      <span class="eyebrow">Screen 2 · Landscape</span>
+      <h2 id="sheet-h">Lead sheet</h2>
+      <p>Turn the phone sideways and Stand becomes a scrolling chart, four bars to a line, with the same rail of essentials on the right.</p>
+    </div>
+    <div class="dev-cell" style="justify-items:start">
+      <div class="scrollx">
+        <div class="device land"><div class="screen">
+          <div class="island"></div>
+          <div class="lapp">
+            <div class="sheet">
+              <div class="sheet-h">
+                <span class="t">All the Things You Are</span>
+                <span class="lbl" id="l-sec">Sax solo · ch 1</span>
+                <span class="sp"></span>
+                <span class="chip"><em>Home</em><b id="l-home">A♭</b></span>
+                <span class="chip"><b class="mono">168</b><em>BPM</em></span>
+                <span class="sync ok"><i></i>±40 ms</span>
+              </div>
+              <div class="rows-win"><div class="rows" id="l-rows"></div></div>
+            </div>
+            <aside class="rail">
+              <div class="row"><span class="lbl">Now</span><span class="chip now" style="padding:3px 8px"><b id="l-reg">C major</b></span></div>
+              <div id="l-chord"></div>
+              <div class="row"><span class="fn" id="l-fn"></span><div class="beats" id="l-beats"><i class="one"></i><i></i><i></i><i></i></div></div>
+              <div class="nx" id="l-next"></div>
+              <div class="row" style="margin-top:2px"><span class="sc" id="l-scale"></span></div>
+              <div class="kb" id="l-kb"></div>
+            </aside>
+          </div>
+          <div class="homebar" style="bottom:6px"></div>
+        </div></div>
+      </div>
+      <span class="dev-cap">874 × 402 pt · Landscape</span>
+    </div>
+    <div class="notes" style="max-width:none">
+      <dl style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px 28px">
+        <div><dt>Chart layout</dt><dd>Four bars per line with rehearsal letters A1, A2, B, A3, like the page you'd read from. Bars with two chords split the space evenly.</dd></div>
+        <div><dt>Playhead</dt><dd>A brass line sweeps the current bar. The chart scrolls one line at a time and keeps the next line in view.</dd></div>
+        <div><dt>Key marks</dt><dd>Rust-red arrows sit above the bar where the key changes, so you can see a modulation a line ahead.</dd></div>
+        <div><dt>Right rail</dt><dd>The current chord, next chord and scale stay in fixed places, so your eye always knows where to look.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ===================== MAP + COACH ===================== -->
+  <section class="block" aria-labelledby="mc-h">
+    <div class="block-h">
+      <span class="eyebrow">Screens 3 and 4 · Portrait</span>
+      <h2 id="mc-h">Song map and Scale coach</h2>
+      <p>Two practice tools. The map shows the shape of the whole recording. The coach turns the next eight changes into an improvising plan.</p>
+    </div>
+    <div class="board two">
+      <div class="dev-cell">
+        <div class="device port"><div class="screen">
+          <div class="island"></div>
+          <div class="sbar"><span>9:41</span><span class="rt">5G <span class="batt"></span></span></div>
+          <div class="app" style="gap:12px">
+            <div class="map-h"><span class="lbl">All the Things You Are · 4:28</span><h2>Song map</h2><p class="map-legend">Colour shows the key, placed by the circle of fifths, so related keys look alike. Tap a row to jump there.</p></div>
+            <div class="sec-ticks"><div></div><div><span>A1</span><span>A2</span><span>B</span><span>A3</span></div></div>
+            <div id="m-rows" style="display:grid;gap:4px"></div>
+            <section class="card keys"><span class="lbl">Key areas in one chorus</span><div id="m-keys" style="display:grid;gap:6px"></div></section>
+            <section class="card loop"><span class="t">Loop the bridge</span><span class="s">Bars 17–24 of the current chorus. Seeks Spotify back at the end of bar 24.</span><span class="go">Loop</span></section>
+          </div>
+          <nav class="tabs" aria-label="App tabs">
+            <span><svg viewBox="0 0 24 24"><path d="M5 4h14v9H5zM8 7h8M8 10h5M12 13v7M8 20h8"/></svg>Stand</span>
+            <span class="on"><svg viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h18M9 4v16M15 4v16"/></svg>Map</span>
+            <span><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Coach</span>
+            <span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>Settings</span>
+          </nav>
+          <div class="homebar"></div>
+        </div></div>
+        <span class="dev-cap">Song map</span>
+      </div>
+      <div class="dev-cell">
+        <div class="device port"><div class="screen">
+          <div class="island"></div>
+          <div class="sbar"><span>9:41</span><span class="rt">5G <span class="batt"></span></span></div>
+          <div class="app" style="gap:10px">
+            <div class="map-h"><span class="lbl" id="c-sub">Next 8 changes · from bar 7</span><h2>Scale coach</h2></div>
+            <div class="lens" role="radiogroup" aria-label="Scale lens">
+              <input type="radio" name="lens" id="lens-inside" value="inside" checked><label for="lens-inside">Inside</label>
+              <input type="radio" name="lens" id="lens-bebop" value="bebop"><label for="lens-bebop">Bebop</label>
+              <input type="radio" name="lens" id="lens-colour" value="colour"><label for="lens-colour">Colour</label>
+            </div>
+            <div class="card tip" id="c-tip"></div>
+            <div class="ctab">
+              <div class="crow hd"><span>Bar</span><span>Chord</span><span>Play</span><span style="text-align:center">Land</span></div>
+              <div id="c-rows"></div>
+            </div>
+          </div>
+          <nav class="tabs" aria-label="App tabs">
+            <span><svg viewBox="0 0 24 24"><path d="M5 4h14v9H5zM8 7h8M8 10h5M12 13v7M8 20h8"/></svg>Stand</span>
+            <span><svg viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h18M9 4v16M15 4v16"/></svg>Map</span>
+            <span class="on"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Coach</span>
+            <span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>Settings</span>
+          </nav>
+          <div class="homebar"></div>
+        </div></div>
+        <span class="dev-cap">Scale coach</span>
+      </div>
+      <div class="notes">
+        <h3>Song map</h3>
+        <dl>
+          <div><dt>One row per pass</dt><dd>Intro, head, each solo chorus, head out, ending. The black marker is the playhead.</dd></div>
+          <div><dt>Key areas</dt><dd>How long the tune spends in each key. Useful for deciding which scales to woodshed first.</dd></div>
+          <div><dt>Loops</dt><dd>Drill any span, like the bridge, by having the app seek Spotify back to the start of it.</dd></div>
+        </dl>
+        <h3 style="margin-top:8px">Scale coach</h3>
+        <dl>
+          <div><dt>Three lenses</dt><dd><b>Inside</b> is the mode the harmony implies. <b>Bebop</b> adds the passing tone that lands chord tones on the beat. <b>Colour</b> reaches for Lydian, melodic minor, Lydian dominant and altered.</dd></div>
+          <div><dt>Land</dt><dd>The 3rd of each chord, the strongest note to hit on the downbeat.</dd></div>
+          <div><dt>Tip card</dt><dd>Spots ii–V–Is coming up and names the guide-tone line through them.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== STATES ===================== -->
+  <section class="block" aria-labelledby="st-h">
+    <div class="block-h">
+      <span class="eyebrow">Components and states</span>
+      <h2 id="st-h">When things aren't perfect</h2>
+      <p>The dashboard tells you how much to trust it. These badges appear in the same places on every screen.</p>
+    </div>
+    <div class="states">
+      <div class="card st">
+        <h3>Sync with Spotify</h3>
+        <ul>
+          <li><span class="sync ok"><i></i>±40 ms</span>Locked. Position is interpolated between polls and corrected on every response.</li>
+          <li><span class="sync warn"><i></i>Re-syncing</span>After a seek, skip or network hiccup. The chart freezes on the last confirmed bar instead of guessing.</li>
+          <li><span class="sync idle"><i></i>Paused</span>Spotify is paused. The chart stays where you left it.</li>
+          <li><span class="sync alert"><i></i>Not connected</span>Sign in again. The button opens Spotify's login.</li>
+        </ul>
+      </div>
+      <div class="card st">
+        <h3>Where the chords came from</h3>
+        <ul>
+          <li><span class="src exact">Analysed</span>A saved timeline for this exact recording. Full look-ahead.</li>
+          <li><span class="src live">Listening live</span>Chords detected as they play, about half a second behind. Up next is hidden.</li>
+          <li><span class="src pred">Predicted</span>Inferred from repeats of the form. Shown in grey until the audio confirms it.</li>
+        </ul>
+      </div>
+      <div class="card st">
+        <h3>Nothing playing</h3>
+        <div class="empty"><span class="ch">N.C.</span><p>Play something on Spotify, on this phone or any speaker, and the chart picks it up within a second.</p></div>
+      </div>
+      <div class="card st">
+        <h3>Settings that change the chart</h3>
+        <div class="set">
+          <span>Instrument</span><span>Concert · E♭ alto · B♭ tenor</span>
+          <span>Chord style</span><span>maj7 / m7 or Δ / –</span>
+          <span>Look-ahead</span><span>4 changes</span>
+          <span>Default scale lens</span><span>Inside</span>
+          <span>Theme</span><span>Stage (dark) · Paper (light)</span>
+        </div>
+        <p style="font-size:13px;color:var(--ink-2)">These sketches follow your viewer's light or dark setting, so you can see both themes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PIPELINE ===================== -->
+  <section class="block" aria-labelledby="pipe-h">
+    <div class="block-h">
+      <span class="eyebrow">How the work is staged</span>
+      <h2 id="pipe-h">Stages and handoffs</h2>
+      <p>Each stage ends by writing a short handoff file in <span class="mono">handoffs/</span>. The next session starts fresh and reads three small files instead of replaying the whole conversation. Milestones M1–M6 are a proposal; stage S2 finalises them.</p>
+    </div>
+    <ol class="pipe">
+      <li class="stage done"><span class="id">S0</span><span class="nm">Brief and research</span><span class="f">00-brief.md</span><span class="why">Requirements, Spotify limits, data options</span></li>
+      <li class="stage here"><span class="id">S1</span><span class="nm">Design sketches</span><span class="f">01-design.md</span><span class="why">This page, and your approval</span></li>
+      <li class="stage"><span class="id">S2</span><span class="nm">Development plan</span><span class="f">02-dev-plan.md</span><span class="why">Stack, architecture, milestones, risks</span></li>
+      <li class="stage"><span class="id">M1</span><span class="nm">Spotify sync spike</span><span class="f">M1-sync.md</span><span class="why">Auth, playhead interpolation, measured drift</span></li>
+      <li class="stage"><span class="id">M2</span><span class="nm">Theory engine</span><span class="f">M2-theory.md</span><span class="why">Chords, transposition, scales, guide tones, with tests</span></li>
+      <li class="stage"><span class="id">M3</span><span class="nm">Chord timeline source</span><span class="f">M3-analysis.md</span><span class="why">Audio analysis into a timeline per track ID</span></li>
+      <li class="stage"><span class="id">M4</span><span class="nm">App shell and Stand</span><span class="f">M4-stand.md</span><span class="why">Portrait dashboard on a recorded timeline</span></li>
+      <li class="stage"><span class="id">M5</span><span class="nm">Live wiring and Lead sheet</span><span class="f">M5-live.md</span><span class="why">Real sync plus timeline, landscape chart</span></li>
+      <li class="stage"><span class="id">M6</span><span class="nm">Map, Coach, TestFlight</span><span class="f">M6-ship.md</span><span class="why">Practice tools, polish, install on your phone</span></li>
+    </ol>
+    <div class="anat">
+      <div class="file" aria-label="Handoff file template"><span class="c"># handoffs/M2-theory.md</span>
+<span class="h">Status:</span> done · 2026-10-24 · next: M3
+<span class="h">## Decisions</span>   <span class="c">(also appended to DECISIONS.md)</span>
+D-14 Chord symbols parsed to a typed model
+<span class="h">## Built</span>       <span class="c">paths only, no code</span>
+packages/theory/src/{chord,scale}.ts
+<span class="h">## Verified</span>    <span class="c">command and result</span>
+npm test -w theory → 212 passed
+<span class="h">## Open</span>        <span class="c">questions for the user</span>
+<span class="h">## Skip</span>        <span class="c">files the next session need not read</span>
+<span class="h">## Next prompt</span> <span class="c">paste into a fresh session</span>
+"Read CLAUDE.md, DECISIONS.md, this file. Do M3."</div>
+      <div class="reads">
+        <h3 style="font:700 20px var(--f-label)">What a fresh session reads</h3>
+        <ol>
+          <li><b>CLAUDE.md</b> names the current stage and the house rules. About 30 lines.</li>
+          <li><b>handoffs/DECISIONS.md</b> lists frozen decisions with IDs, so they aren't argued again.</li>
+          <li><b>The latest handoff</b> covers what was built and verified, what's open, and the exact next step. 120 lines at most.</li>
+        </ol>
+        <p style="color:var(--ink-2)">Together that's a few thousand tokens. Older handoffs stay in the repo as history, and nobody needs to load them.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="dec-h">
+    <div class="block-h">
+      <span class="eyebrow">To approve this round</span>
+      <h2 id="dec-h">Decisions I need from you</h2>
+    </div>
+    <div class="decide">
+      <ol>
+        <li><b>Design direction.</b> Approve these four screens, or tell me what to change.</li>
+        <li><b>Your saxophone.</b> Alto, tenor, or both. This sets the default transposition.</li>
+        <li><b>Chord source.</b> How the app gets a chord timeline, given that Spotify won't provide one.</li>
+        <li><b>Build machine.</b> Whether you have a Mac. That decides native Swift or a cross-platform build from Windows.</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>MusicQueery · design/sketchbook.html · Sample data: All the Things You Are (Kern / Hammerstein), changes as commonly played, 168 BPM, illustrative only.</footer>
+</div>
+
+<script>
+(function(){
+const BPM=168, BEAT=60/BPM;
+const LET='CDEFGAB', NAT=[0,2,4,5,7,9,11];
+const SHARP=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'], FLAT=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+const INST={concert:{l:0,s:0,label:'Concert pitch'},alto:{l:5,s:9,label:'Written · E♭ alto'},tenor:{l:1,s:2,label:'Written · B♭ tenor'}};
+let inst='concert', lens='inside';
+const mod=(n,m)=>((n%m)+m)%m;
+const $=s=>document.querySelector(s);
+
+function pn(n){const L=LET.indexOf(n[0]);let a=0;for(const c of n.slice(1)){if(c==='♭')a--;else if(c==='♯')a++;}return{L,a,pc:mod(NAT[L]+a,12)};}
+function sp(L,pc){L=mod(L,7);let a=mod(pc-NAT[L],12);if(a>6)a-=12;return LET[L]+(a>0?'♯'.repeat(a):'♭'.repeat(-a));}
+function tn(n){if(inst==='concert')return n;const p=pn(n),i=INST[inst];return sp(p.L+i.l,p.pc+i.s);}
+const pcOf=n=>pn(n).pc;
+const acc=s=>s.replace(/([♭♯]+)/g,'<span class="acc">$1</span>');
+function parseChord(sym){const m=sym.match(/^([A-G][♭♯]?)(.*)$/),q=m[2];
+  const type=q.startsWith('maj7')?'maj7':q.startsWith('m7♭5')?'m7b5':q.startsWith('m7')?'m7':q.startsWith('°7')?'dim7':q.startsWith('7♯5')?'aug7':q.startsWith('7')?'7':'maj';
+  return{root:m[1],q,type};}
+const tsym=sym=>{const c=parseChord(sym);return tn(c.root)+c.q;};
+const TONES={maj7:[[0,0],[2,4],[4,7],[6,11]],m7:[[0,0],[2,3],[4,7],[6,10]],'7':[[0,0],[2,4],[4,7],[6,10]],m7b5:[[0,0],[2,3],[4,6],[6,10]],dim7:[[0,0],[2,3],[4,6],[6,9]],aug7:[[0,0],[2,4],[4,8],[6,10]],maj:[[0,0],[2,4],[4,7]]};
+function chordTones(sym){const c=parseChord(sym),r=pn(c.root);return TONES[c.type].map(([l,s])=>sp(r.L+l,r.pc+s));}
+function chordHTML(sym,cls){const c=parseChord(tsym(sym));return `<span class="ch${cls?' '+cls:''}"><span class="r">${acc(c.root)}</span><span class="q">${acc(c.q)}</span></span>`;}
+
+const SCALES={major:['major',[0,2,4,5,7,9,11]],lydian:['Lydian',[0,2,4,6,7,9,11]],mixolydian:['Mixolydian',[0,2,4,5,7,9,10]],dorian:['Dorian',[0,2,3,5,7,9,10]],aeolian:['Aeolian',[0,2,3,5,7,8,10]],phrygian:['Phrygian',[0,1,3,5,7,8,10]],locrian:['Locrian',[0,1,3,5,6,8,10]],locrian2:['Locrian ♮2',[0,2,3,5,6,8,10]],phrygdom:['Phrygian dominant',[0,1,4,5,7,8,10]],whole:['whole tone',[0,2,4,6,8,10]],dim:['diminished',[0,2,3,5,6,8,9,11]],bebopMaj:['major bebop',[0,2,4,5,7,8,9,11]],bebopDom:['dominant bebop',[0,2,4,5,7,9,10,11]],bebopDor:['Dorian bebop',[0,2,3,4,5,7,9,10]],melmin:['melodic minor',[0,2,3,5,7,9,11]],lyddom:['Lydian dominant',[0,2,4,6,7,9,10]],altered:['altered',[0,1,3,4,6,8,10]]};
+function scaleNotes(root,key){const iv=SCALES[key][1],r=pn(root);if(iv.length===7)return iv.map((x,i)=>sp(r.L+i,r.pc+x));const flat=root.includes('♭')||root==='F';return iv.map(x=>(flat?FLAT:SHARP)[mod(r.pc+x,12)]);}
+const RN=['I','♭II','II','♭III','III','IV','♯IV','V','♭VI','VI','♭VII','VII'];
+function roman(sym,reg){const c=parseChord(sym),d=mod(pcOf(c.root)-pcOf(reg),12);let r=RN[d];if(['m7','m7b5','dim7'].includes(c.type))r=r.toLowerCase();return r+{maj7:'maj7',m7:'7','7':'7',m7b5:'ø7',dim7:'°7',aug7:'+7',maj:''}[c.type];}
+function pickScale(sym,reg,next,ln){const c=parseChord(sym),d=mod(pcOf(c.root)-pcOf(reg),12),nm=next&&['m7','m7b5'].includes(parseChord(next).type);
+  if(ln==='inside')return{maj7:d===5?'lydian':'major',m7:d===9?'aeolian':d===4?'phrygian':'dorian','7':nm?'phrygdom':'mixolydian',m7b5:'locrian',dim7:'dim',aug7:'whole',maj:'major'}[c.type];
+  if(ln==='bebop')return{maj7:'bebopMaj',m7:'bebopDor','7':'bebopDom',m7b5:'locrian2',dim7:'dim',aug7:'whole',maj:'bebopMaj'}[c.type];
+  return{maj7:'lydian',m7:'melmin','7':nm?'altered':'lyddom',m7b5:'locrian2',dim7:'dim',aug7:'altered',maj:'lydian'}[c.type];}
+function scaleName(sym,key){return acc(tn(parseChord(sym).root))+' '+acc(SCALES[key][0]);}
+
+/* ---- the tune ---- */
+const R=(k,n)=>Array(n).fill(k);
+const FORM=[['Fm7'],['B♭m7'],['E♭7'],['A♭maj7'],['D♭maj7'],['G7'],['Cmaj7'],['Cmaj7'],
+ ['Cm7'],['Fm7'],['B♭7'],['E♭maj7'],['A♭maj7'],['Am7','D7'],['Gmaj7'],['Gmaj7'],
+ ['Am7'],['D7'],['Gmaj7'],['Gmaj7'],['F♯m7'],['B7'],['Emaj7'],['C7♯5'],
+ ['Fm7'],['B♭m7'],['E♭7'],['A♭maj7'],['D♭maj7'],['D♭m7'],['Cm7'],['B°7'],['B♭m7'],['E♭7'],['A♭maj7'],['Gm7♭5','C7']];
+const FREG=[...R('A♭',5),...R('C',3),...R('E♭',5),...R('G',7),...R('E',3),...R('A♭',13)];
+const FFN={24:['V7/vi'],30:['iv7 borrowed'],32:['passing °7'],36:['iiø7/vi','V7/vi']};
+const REH={1:'A1',9:'A2',17:'B',25:'A3'};
+const INTRO=[['B♭m7'],['E♭7'],['A♭maj7'],['Gm7♭5','C7']], END=[['B♭m7'],['E♭7'],['A♭maj7'],['A♭maj7']];
+const SECTIONS=[{name:'Intro',bars:INTRO,reg:R('A♭',4),fn:{4:['iiø7/vi','V7/vi']}}];
+['Head','Sax solo · ch 1','Sax solo · ch 2','Piano solo','Head out'].forEach(n=>SECTIONS.push({name:n,bars:FORM,reg:FREG,fn:FFN,form:true}));
+SECTIONS.push({name:'Ending',bars:END,reg:R('A♭',4),fn:{}});
+const BARS=[],EV=[];
+SECTIONS.forEach((sec,si)=>{sec.start=BARS.length;sec.bars.forEach((ch,bi)=>BARS.push({si,b:bi+1,ch,reg:sec.reg[bi],fn:sec.fn[bi+1]}));});
+let beat=0;
+BARS.forEach((bar,ab)=>{const len=4/bar.ch.length;bar.ch.forEach((sym,ci)=>{const ov=bar.fn?bar.fn[ci]:null,last=EV[EV.length-1];
+  if(last&&last.sym===sym&&last.reg===bar.reg&&!ov&&!last.ov)last.len+=len;else EV.push({sym,reg:bar.reg,start:beat,len,ab,ov,fn:ov});beat+=len;});});
+const TOTAL=beat, DUR=TOTAL*BEAT;
+EV.forEach((e,i)=>{e.fn=e.fn||roman(e.sym,e.reg);e.next=EV[i+1]?EV[i+1].sym:null;});
+const START=(4+36+6)*4*BEAT+1.05*BEAT;
+let t=START;
+
+function at(t){const b=Math.min(TOTAL-1e-6,Math.max(0,t/BEAT));const i=EV.findIndex(e=>b<e.start+e.len);const ab=Math.floor(b/4);return{b,i,ev:EV[i],ab,bar:BARS[ab],beatIn:Math.floor(b%4),frac:(b%4)/4};}
+const fmt=s=>{s=Math.max(0,s);return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');};
+const fifthsHue=n=>mod(pcOf(n)*7,12)*30+25;
+
+function kb(scale,tones,w,h){const W=14,ww=w/W,bw=ww*.62,bh=h*.6,sc=new Set(scale.map(n=>pcOf(n))),tm={};
+  tones.forEach((n,i)=>tm[pcOf(n)]=['R','3','5','7'][i]);
+  let s=`<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="Keyboard: tinted keys are the scale, dots are chord tones">`;
+  const dot=(cx,cy,r,lab)=>`<circle class="kdot${lab==='3'||lab==='7'?' g':''}" cx="${cx}" cy="${cy}" r="${r}"/><text class="ktx" x="${cx}" y="${cy}" font-size="${(r*1.15).toFixed(1)}">${lab}</text>`;
+  for(let o=0;o<2;o++)for(let i=0;i<7;i++){const pc=NAT[i],x=(o*7+i)*ww;s+=`<rect class="kw${sc.has(pc)?' in':''}" x="${x+.5}" y=".5" width="${ww-1}" height="${h-1}" rx="3"/>`;if(tm[pc])s+=dot(x+ww/2,h-ww*.5,ww*.3,tm[pc]);}
+  for(let o=0;o<2;o++)for(const[i,pc]of[[0,1],[1,3],[3,6],[4,8],[5,10]]){const x=(o*7+i+1)*ww-bw/2;s+=`<rect class="kbk${sc.has(pc)?' in':''}" x="${x}" y=".5" width="${bw}" height="${bh}" rx="2"/>`;if(tm[pc])s+=dot(x+bw/2,bh-bw*.62,bw*.38,tm[pc]);}
+  return s+'</svg>';}
+
+function guideHTML(ev){if(!ev.next)return'';const a=chordTones(tsym(ev.sym)),b=chordTones(tsym(ev.next));if(a.length<4)return'';
+  const cand=[[b[1],'3'],[b[3]||b[1],b[3]?'7':'3']];
+  const pair=(n,deg)=>{let best=cand[0],bd=99;cand.forEach(c=>{const d=Math.min(mod(pcOf(c[0])-pcOf(n),12),mod(pcOf(n)-pcOf(c[0]),12));if(d<bd){bd=d;best=c;}});return `<span><b>${acc(n)}</b><sub>${deg}</sub> → <b>${acc(best[0])}</b><sub>${best[1]}</sub></span>`;};
+  return `<span class="lbl">Guide tones into ${chordHTML(ev.next).replace('class="ch"','class="ch" style="font-size:17px"')}</span>${pair(a[1],'3')}${pair(a[3],'7')}`;}
+
+function nextChange(s){for(let j=s.i+1;j<EV.length;j++)if(EV[j].reg!==s.ev.reg)return EV[j];return null;}
+
+/* ---- render: Stand ---- */
+function renderStand(s){
+  $('#s-home').innerHTML=acc(tn('A♭'))+' major';
+  $('#s-reg').innerHTML=acc(tn(s.ev.reg))+' major';
+  const sec=SECTIONS[s.bar.si];
+  $('#s-sec').textContent=sec.name;
+  $('#s-bar').textContent=`Bar ${s.bar.b} / ${sec.bars.length}`;
+  $('#s-chord').innerHTML=chordHTML(s.ev.sym);
+  $('#s-fn').innerHTML=`<b>${acc(s.ev.fn)}</b> in ${acc(tn(s.ev.reg))}`;
+  $('#s-next').innerHTML=EV.slice(s.i+1,s.i+5).map(e=>{const nb=Math.ceil(e.start-s.b);return `<li>${chordHTML(e.sym)}<span class="mono">${nb===1?'1 beat':nb+' beats'}</span></li>`;}).join('');
+  const kc=nextChange(s),el=$('#s-kc');
+  if(kc){const nb=Math.ceil(kc.start-s.b),bar=BARS[kc.ab];el.className='card kc'+(nb<=4?' soon':'');
+    el.innerHTML=`<span class="lbl">Key change</span><span class="big"><span style="color:var(--ink-2);font-weight:600">${acc(tn(s.ev.reg))}</span> <span class="arrow">→</span> ${acc(tn(kc.reg))} major</span><span class="meta mono">${nb} beats</span><span class="meta" style="grid-column:2/4">At bar ${bar.b}${bar.si!==s.bar.si?' of '+SECTIONS[bar.si].name:''}, on ${chordHTML(kc.sym).replace('class="ch"','class="ch" style="font-size:16px"')}</span><span class="meter"><i style="width:${Math.max(4,(1-Math.min(nb,16)/16)*100)}%"></i></span>`;}
+  else{el.className='card kc';el.innerHTML='<span class="lbl">Key change</span><span class="big">None ahead</span><span></span>';}
+  const key=pickScale(s.ev.sym,s.ev.reg,s.ev.next,'inside'),alt=pickScale(s.ev.sym,s.ev.reg,s.ev.next,'colour');
+  const root=tn(parseChord(s.ev.sym).root),notes=scaleNotes(root,key),tones=chordTones(tsym(s.ev.sym));
+  $('#s-scale').innerHTML=scaleName(s.ev.sym,key);
+  $('#s-alt').innerHTML=alt!==key?'or '+scaleName(s.ev.sym,alt):'';
+  $('#s-inst').innerHTML=acc(INST[inst].label);
+  const tp=tones.map(pcOf);
+  $('#s-notes').innerHTML=notes.map(n=>{const k=tp.indexOf(pcOf(n));return `<span class="${k===1||k===3?'g':k>=0?'t':''}">${acc(n)}</span>`;}).join('');
+  $('#s-kb').innerHTML=kb(notes,tones,372,72);
+  $('#s-gt').innerHTML=guideHTML(s.ev);
+}
+
+/* ---- render: Lead sheet ---- */
+let sheetKey='';
+function buildSheet(si){const sec=SECTIONS[si];let prev=null;
+  $('#l-rows').innerHTML=sec.bars.map((ch,bi)=>{const reg=sec.reg[bi];let mk='';
+    if(bi===0)mk=`<span class="kmark home">${acc(tn(reg))}</span>`;else if(reg!==prev)mk=`<span class="kmark">→ ${acc(tn(reg))}</span>`;prev=reg;
+    const reh=sec.form&&REH[bi+1]?`<span class="reh">${REH[bi+1]}</span>`:'';
+    return `<div class="lb${ch.length>1?' split':''}${bi===sec.bars.length-1?' end':''}" data-i="${bi}">${reh}${mk}${ch.map(c=>chordHTML(c)).join('')}<span class="num">${bi+1}</span><span class="ph"></span></div>`;}).join('');}
+function renderSheet(s){
+  const k=s.bar.si+'|'+inst;if(k!==sheetKey){buildSheet(s.bar.si);sheetKey=k;}
+  const sec=SECTIONS[s.bar.si],cur=s.bar.b-1;
+  $('#l-sec').textContent=sec.name;$('#l-home').innerHTML=acc(tn('A♭'));
+  document.querySelectorAll('#l-rows .lb').forEach((el,i)=>{el.classList.toggle('cur',i===cur);el.classList.toggle('past',i<cur);});
+  const rows=Math.ceil(sec.bars.length/4),row=Math.floor(cur/4),top=Math.max(0,Math.min(rows-4,row-1));
+  $('#l-rows').style.transform=`translateY(${-top*78}px)`;
+  $('#l-reg').innerHTML=acc(tn(s.ev.reg))+' major';
+  $('#l-chord').innerHTML=chordHTML(s.ev.sym,'big');
+  $('#l-fn').innerHTML=acc(s.ev.fn);
+  const n=EV[s.i+1];$('#l-next').innerHTML=n?`<span class="lbl">Next</span>${chordHTML(n.sym)}<span class="mono">in ${Math.ceil(n.start-s.b)} beats</span>`:'';
+  const key=pickScale(s.ev.sym,s.ev.reg,s.ev.next,'inside');
+  $('#l-scale').innerHTML=scaleName(s.ev.sym,key);
+  $('#l-kb').innerHTML=kb(scaleNotes(tn(parseChord(s.ev.sym).root),key),chordTones(tsym(s.ev.sym)),212,58);
+}
+function playhead(s){const el=document.querySelector('#l-rows .lb.cur .ph');if(el)el.style.left=(s.frac*100).toFixed(2)+'%';
+  ['#s-beats','#l-beats'].forEach(id=>$(id).querySelectorAll('i').forEach((d,i)=>d.classList.toggle('on',i===s.beatIn)));
+  $('#s-t').textContent=fmt(t);$('#s-fill').style.width=(t/DUR*100).toFixed(2)+'%';
+  $('#scrub-t').textContent=fmt(t)+' / '+fmt(DUR);
+  const mk=document.querySelector('#m-rows .mrow.on .mk');if(mk){const sec=SECTIONS[s.bar.si];mk.style.left=`calc(${((s.b/4-sec.start)/sec.bars.length*100).toFixed(2)}% - 1px)`;}
+}
+
+/* ---- render: Song map ---- */
+let mapKey='';
+function buildMap(){
+  $('#m-rows').innerHTML=SECTIONS.map((sec,si)=>`<button type="button" class="mrow" data-si="${si}"><span class="nm">${sec.name}</span><span style="min-width:0"><span class="strip${sec.form?'':' short'}">${sec.bars.map((_,bi)=>`<i style="--h:${fifthsHue(tn(sec.reg[bi]))}"></i>`).join('')}<span class="mk"></span></span></span></button>`).join('');
+  const cnt={};FREG.forEach(k=>cnt[k]=(cnt[k]||0)+1);
+  $('#m-keys').innerHTML=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`<div class="krow"><span class="sw" style="--h:${fifthsHue(tn(k))}"></span><span>${acc(tn(k))} major${k==='A♭'?' <span class="lbl">home</span>':''}</span><span class="bar"><i style="width:${n/18*100}%"></i></span><span class="mono">${n} bars</span></div>`).join('');
+  document.querySelectorAll('#m-rows .mrow').forEach(b=>b.addEventListener('click',()=>{t=SECTIONS[+b.dataset.si].start*4*BEAT+.01;render(true);}));
+}
+function renderMap(s){if(mapKey!==inst){buildMap();mapKey=inst;}
+  document.querySelectorAll('#m-rows .mrow').forEach((r,i)=>r.classList.toggle('on',i===s.bar.si));
+  document.querySelectorAll('#m-rows .mk').forEach((m,i)=>m.style.display=i===s.bar.si?'block':'none');}
+
+/* ---- render: Coach ---- */
+function renderCoach(s){
+  const evs=EV.slice(s.i,s.i+8);
+  $('#c-sub').textContent=`Next 8 changes · from bar ${s.bar.b}`;
+  $('#c-rows').innerHTML=evs.map((e,k)=>{const key=pickScale(e.sym,e.reg,e.next,lens),tones=chordTones(tsym(e.sym));
+    return `<div class="crow${k===0?' on':''}"><span class="mono">${BARS[e.ab].b}</span>${chordHTML(e.sym)}<span style="min-width:0"><span class="scn">${scaleName(e.sym,key)}</span><br><span class="fnn">${acc(e.fn)} in ${acc(tn(e.reg))}</span></span><span class="land">${acc(tones[1])}</span></div>`;}).join('');
+  let tip='No ii–V–I in the next few bars. Target the 3rd of each chord on beat one.';
+  for(let j=s.i;j<Math.min(EV.length-2,s.i+8);j++){const a=parseChord(EV[j].sym),b=parseChord(EV[j+1].sym),c=parseChord(EV[j+2].sym);
+    if(['m7','m7b5'].includes(a.type)&&b.type==='7'&&['maj7','m7'].includes(c.type)&&mod(pcOf(b.root)-pcOf(a.root),12)===5&&mod(pcOf(c.root)-pcOf(b.root),12)===5){
+      const at=chordTones(tsym(EV[j].sym)),bt=chordTones(tsym(EV[j+1].sym)),ct=chordTones(tsym(EV[j+2].sym));
+      tip=`<b>ii–V–I into ${acc(tn(c.root))} ${c.type==='m7'?'minor':'major'}</b> at bar ${BARS[EV[j].ab].b}. Guide-tone line: ${acc(at[3])} → ${acc(bt[1])} → ${acc(ct[3])}. The 7th of the ii falls a half step to the 3rd of the V, which ${c.type==='m7'?'falls another half step to':'holds over as'} the 7th of the I.`;break;}}
+  $('#c-tip').innerHTML=tip;
+}
+
+let lastBeat=-1;
+function render(force){const s=at(t);const bk=Math.floor(s.b*2);
+  if(force||bk!==lastBeat){renderStand(s);renderSheet(s);renderMap(s);renderCoach(s);lastBeat=bk;}
+  playhead(s);$('#scrub').value=t;}
+
+/* ---- transport ---- */
+const scrub=$('#scrub');scrub.max=DUR.toFixed(2);
+$('#s-d').textContent=fmt(DUR);
+let playing=false,last=0;
+function loop(ts){if(!playing)return;if(last)t+=(ts-last)/1000;last=ts;if(t>=DUR)t=0;render(false);requestAnimationFrame(loop);}
+const pb=$('#play');
+pb.addEventListener('click',()=>{playing=!playing;pb.setAttribute('aria-pressed',playing);pb.textContent=playing?'❚❚ Pause':'▶ Play demo';last=0;if(playing)requestAnimationFrame(loop);});
+$('#reset').addEventListener('click',()=>{t=START;render(true);});
+scrub.addEventListener('input',()=>{t=+scrub.value;render(true);});
+document.querySelectorAll('input[name="inst"]').forEach(r=>r.addEventListener('change',()=>{inst=r.value;render(true);}));
+document.querySelectorAll('input[name="lens"]').forEach(r=>r.addEventListener('change',()=>{lens=r.value;render(true);}));
+const checked=document.querySelector('input[name="inst"]:checked');if(checked)inst=checked.value;
+const lc=document.querySelector('input[name="lens"]:checked');if(lc)lens=lc.value;
+render(true);
+})();
+</script>
