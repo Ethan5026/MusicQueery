@@ -1,0 +1,14 @@
+name = "musicqueery-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://musicqueery.pages.dev,http://127.0.0.1:5173,http://localhost:5173"
+
+# Remote device logs are console.log'd: `pnpm --filter @mq/worker tail` live, Workers Logs for 3 days.
+[observability]
+enabled = true
+
+[[kv_namespaces]]
+binding = "STORE"
+id = "REPLACE_WITH_KV_ID"
