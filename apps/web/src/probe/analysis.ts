@@ -1,7 +1,14 @@
 // Drift probe analysis (pure). The mic hears a metronome track; every click lies on a grid
 // k·P + c in track time. For each click we read the clock's predicted position at the moment
-// the click was heard; its phase on the grid should stay constant. Drift is the phase change
-// since calibration, so the unknown click offset c and fixed latencies cancel out.
+// the click was heard; its phase on the grid should stay constant. Drift is the phase's change
+// from the track's reference phase, so the unknown click offset c and fixed latencies cancel out.
+//
+// Live, each track is calibrated on its first clicks and errors beyond the tolerance open an
+// "episode" that ends when the clock re-locks. Episodes with a user jump (seek, skip, pause/play)
+// are re-lock data; the others are drift. If the clock settles on a new phase with no user jump
+// (a Spotify 'resync'), that is a step: recorded, then recalibrated so the probe carries on.
+// The summary measures every non-jump click against the track's reference phase over the whole
+// run (circular median), so the majority state is the reference, not the first 20 s.
 
 export interface ClockAt {
   trackId: string | null
@@ -16,7 +23,10 @@ export interface Onset {
   level: number
 }
 
-export type EpisodeKind = 'seek' | 'track' | 'play' | 'pause' | 'drift'
+export type EpisodeKind = 'seek' | 'track' | 'play' | 'pause' | 'resync' | 'drift'
+
+/** Episodes caused by the user; their clicks are re-lock data, not drift. */
+const USER_JUMPS: readonly EpisodeKind[] = ['seek', 'track', 'play', 'pause']
 
 export interface Episode {
   kind: EpisodeKind
@@ -30,6 +40,13 @@ export interface Episode {
   relockMinMs: number
 }
 
+export interface Step {
+  at: number
+  trackId: string
+  /** New phase − old phase. */
+  sizeMs: number
+}
+
 export interface DriftPoint {
   at: number
   driftMs: number
@@ -38,7 +55,8 @@ export interface DriftPoint {
 export interface Summary {
   periodMs: number
   calibrated: boolean
-  calibrationPhaseMs: number | null
+  /** Reference phase of the first track (= device offset if its first click is at 0 ms). */
+  referencePhaseMs: number | null
   measuredFromAt: number | null
   measuredForMs: number
   points: number
@@ -50,7 +68,12 @@ export interface Summary {
   onsets: number
   rejected: number
   unclocked: number
+  /** Clicks inside user-jump episodes (left out of the drift stats). */
+  excluded: number
   episodes: Episode[]
+  steps: Step[]
+  /** Set while out of lock: when the open episode's first bad click was heard. */
+  outOfLockSinceAt: number | null
   fittedPeriodMs: number | null
   periodPpm: number | null
 }
@@ -64,6 +87,9 @@ export interface AnalyzerOptions {
   toleranceMs?: number
   /** Consecutive good clicks that count as re-locked. */
   relockRun?: number
+  /** Consecutive bad clicks on one stable phase that count as a step. */
+  stepRun?: number
+  stepSpreadMs?: number
 }
 
 export function wrap(x: number, period: number): number {
@@ -105,25 +131,41 @@ export function slope(xs: number[], ys: number[]): number {
   return den === 0 ? 0 : num / den
 }
 
+interface Measured {
+  at: number
+  trackId: string
+  phase: number
+  /** Inside a user-jump episode. */
+  excluded: boolean
+  /** Inside the currently open episode (not yet classified). */
+  pending: boolean
+}
+
 interface OpenEpisode {
   startAt: number
   firstBadAt: number
   kinds: Set<EpisodeKind>
-  points: DriftPoint[]
-  goodRun: DriftPoint[]
+  clicks: Measured[]
+  goodRun: Measured[]
+  badRun: Measured[]
 }
 
 export class DriftAnalyzer {
   readonly periodMs: number
+  /** Live drift against the live calibration, for the plot. */
   readonly points: DriftPoint[] = []
   readonly episodes: Episode[] = []
+  readonly steps: Step[] = []
   private readonly calibrateMs: number
   private readonly calibrateMin: number
   private readonly tol: number
   private readonly relockRun: number
+  private readonly stepRun: number
+  private readonly stepSpread: number
 
   private cal = new Map<string, number>()
   private pending = new Map<string, { at: number; phase: number }[]>()
+  private measured: Measured[] = []
   private accepted: number[] = []
   private lastHeardAt: number | undefined
   private onsets = 0
@@ -132,6 +174,7 @@ export class DriftAnalyzer {
   private lastGoodAt: number | null = null
   private open: OpenEpisode | null = null
   private firstCalAt: number | null = null
+  private firstTrack: string | null = null
 
   constructor(o: AnalyzerOptions) {
     this.periodMs = o.periodMs
@@ -139,20 +182,20 @@ export class DriftAnalyzer {
     this.calibrateMin = o.calibrateMin ?? 8
     this.tol = o.toleranceMs ?? 150
     this.relockRun = o.relockRun ?? 3
+    this.stepRun = o.stepRun ?? 8
+    this.stepSpread = o.stepSpreadMs ?? 40
   }
 
   /** Clock jumps classify the episode they fall in. */
   addJump(kind: string, at: number): void {
-    const k = (['seek', 'track', 'play', 'pause'] as const).find((x) => x === kind)
-    if (!k) return
-    if (this.open) {
-      this.open.kinds.add(k)
-      // A new track needs its own calibration, so the episode ends when the clock sees the change.
-      if (k === 'track') this.close(at)
-    }
+    const k = (['seek', 'track', 'play', 'pause', 'resync'] as const).find((x) => x === kind)
+    if (!k || !this.open) return
+    this.open.kinds.add(k)
+    // A new track needs its own calibration, so the episode ends when the clock sees the change.
+    if (k === 'track') this.close(at)
   }
 
-  /** Returns the drift for this click, or null while rejected, unclocked or calibrating. */
+  /** Returns the live drift for this click, or null while rejected, unclocked or calibrating. */
   addOnset(o: Onset, clock: ClockAt): number | null {
     this.onsets++
     const P = this.periodMs
@@ -185,10 +228,12 @@ export class DriftAnalyzer {
       this.calibrate(clock.trackId, o.at, phase)
       return null
     }
+    const m: Measured = { at: o.at, trackId: clock.trackId, phase, excluded: false, pending: false }
+    this.measured.push(m)
     const d = wrap(phase - cal, P)
-    const pt = { at: o.at, driftMs: d }
-    if (Math.abs(d) <= this.tol) this.good(pt)
-    else this.bad(audibleAt, pt)
+    this.points.push({ at: o.at, driftMs: d })
+    if (Math.abs(d) <= this.tol) this.good(m)
+    else this.bad(audibleAt, m)
     return d
   }
 
@@ -207,22 +252,26 @@ export class DriftAnalyzer {
         ),
       )
       this.pending.delete(trackId)
-      if (first) this.firstCalAt = at
+      if (first) {
+        this.firstCalAt = at
+        this.firstTrack = trackId
+      }
       this.lastGoodAt = at
     }
   }
 
-  private good(pt: DriftPoint): void {
+  private good(m: Measured): void {
     if (!this.open) {
-      this.points.push(pt)
-      this.lastGoodAt = pt.at
+      this.lastGoodAt = m.at
       return
     }
-    this.open.goodRun.push(pt)
-    if (this.open.goodRun.length >= this.relockRun) this.close((this.open.goodRun[0] as DriftPoint).at)
+    m.pending = true
+    this.open.badRun = []
+    this.open.goodRun.push(m)
+    if (this.open.goodRun.length >= this.relockRun) this.close((this.open.goodRun[0] as Measured).at)
   }
 
-  private bad(at: number, pt: DriftPoint | null): void {
+  private bad(at: number, m: Measured | null): void {
     if (this.firstCalAt === null) return
     if (!this.open) {
       const last = this.lastGoodAt ?? at
@@ -230,29 +279,47 @@ export class DriftAnalyzer {
         startAt: Math.max(last, at - this.periodMs),
         firstBadAt: at,
         kinds: new Set(),
-        points: [],
+        clicks: [],
         goodRun: [],
+        badRun: [],
       }
     }
+    const e = this.open
     // A bad click breaks the good run; its clicks stay with the episode.
-    this.open.points.push(...this.open.goodRun)
-    this.open.goodRun = []
-    if (pt) this.open.points.push(pt)
+    e.clicks.push(...e.goodRun)
+    e.goodRun = []
+    if (!m) {
+      e.badRun = []
+      return
+    }
+    m.pending = true
+    e.clicks.push(m)
+    e.badRun.push(m)
+    this.maybeStep(e)
+  }
+
+  /** No user jump, and the clock has settled on a new phase: record a step and recalibrate. */
+  private maybeStep(e: OpenEpisode): void {
+    if ([...e.kinds].some((k) => USER_JUMPS.includes(k))) return
+    const run = e.badRun.slice(-this.stepRun)
+    if (run.length < this.stepRun || run.some((m) => m.trackId !== (run[0] as Measured).trackId)) return
+    const phases = run.map((m) => m.phase)
+    const centre = circularMedian(phases, this.periodMs)
+    if (phases.some((p) => Math.abs(wrap(p - centre, this.periodMs)) > this.stepSpread / 2)) return
+    const trackId = (run[0] as Measured).trackId
+    const old = this.cal.get(trackId) ?? centre
+    this.steps.push({ at: (run[0] as Measured).at, trackId, sizeMs: wrap(centre - old, this.periodMs) })
+    this.cal.set(trackId, centre)
+    e.goodRun = []
+    this.close((run[0] as Measured).at)
   }
 
   private close(endAt: number): void {
     const e = this.open
     if (!e) return
     this.open = null
-    const kind: EpisodeKind = e.kinds.has('track')
-      ? 'track'
-      : e.kinds.has('seek')
-        ? 'seek'
-        : e.kinds.has('play')
-          ? 'play'
-          : e.kinds.has('pause')
-            ? 'pause'
-            : 'drift'
+    const kind: EpisodeKind =
+      (['track', 'seek', 'play', 'pause', 'resync'] as const).find((k) => e.kinds.has(k)) ?? 'drift'
     const end = Math.max(endAt, e.firstBadAt)
     this.episodes.push({
       kind,
@@ -262,12 +329,15 @@ export class DriftAnalyzer {
       relockMs: end - e.startAt,
       relockMinMs: end - e.firstBadAt,
     })
-    // Unexplained excursions are drift and count in the stats; jump episodes are re-lock data.
-    if (kind === 'drift') this.points.push(...e.points)
-    this.points.push(...e.goodRun)
-    const lastPt = e.goodRun.at(-1)
-    if (lastPt) this.lastGoodAt = lastPt.at
-    this.points.sort((a, b) => a.at - b.at)
+    // Clicks before re-lock in a user-jump episode are re-lock data, not drift.
+    const userJump = USER_JUMPS.includes(kind)
+    for (const m of e.clicks) {
+      m.pending = false
+      if (userJump && m.at < end) m.excluded = true
+    }
+    for (const m of e.goodRun) m.pending = false
+    const lastGood = e.goodRun.at(-1)
+    this.lastGoodAt = lastGood ? lastGood.at : end
   }
 
   /** Period from the audio alone (longest run of single-period intervals), as a tempo check. */
@@ -292,34 +362,42 @@ export class DriftAnalyzer {
   }
 
   summary(): Summary {
-    const abs = this.points.map((p) => Math.abs(p.driftMs)).sort((a, b) => a - b)
+    const P = this.periodMs
+    const used = this.measured.filter((m) => !m.excluded && !m.pending)
+    const byTrack = new Map<string, number[]>()
+    for (const m of used) byTrack.set(m.trackId, [...(byTrack.get(m.trackId) ?? []), m.phase])
+    const ref = new Map([...byTrack].map(([t, ph]) => [t, circularMedian(ph, P)]))
+    const drift = used.map((m) => ({ at: m.at, d: wrap(m.phase - (ref.get(m.trackId) as number), P) }))
+    const abs = drift.map((x) => Math.abs(x.d)).sort((a, b) => a - b)
     const has = abs.length > 0
     const fitted = this.fittedPeriod()
-    const firstTrackCal = this.cal.values().next()
     return {
-      periodMs: this.periodMs,
+      periodMs: P,
       calibrated: this.firstCalAt !== null,
-      calibrationPhaseMs: firstTrackCal.done ? null : firstTrackCal.value,
+      referencePhaseMs: this.firstTrack === null ? null : (ref.get(this.firstTrack) ?? null),
       measuredFromAt: this.firstCalAt,
-      measuredForMs: has && this.firstCalAt !== null ? (this.points.at(-1) as DriftPoint).at - this.firstCalAt : 0,
+      measuredForMs: has ? (drift.at(-1) as { at: number }).at - (drift[0] as { at: number }).at : 0,
       points: abs.length,
       medianAbsMs: has ? quantile(abs, 0.5) : null,
       p95AbsMs: has ? quantile(abs, 0.95) : null,
       maxAbsMs: has ? (abs.at(-1) as number) : null,
-      meanMs: has ? this.points.reduce((a, p) => a + p.driftMs, 0) / abs.length : null,
+      meanMs: has ? drift.reduce((a, x) => a + x.d, 0) / abs.length : null,
       slopeMsPerMin:
         abs.length >= 10
           ? slope(
-              this.points.map((p) => p.at / 60_000),
-              this.points.map((p) => p.driftMs),
+              drift.map((x) => x.at / 60_000),
+              drift.map((x) => x.d),
             )
           : null,
       onsets: this.onsets,
       rejected: this.rejected,
       unclocked: this.unclocked,
+      excluded: this.measured.filter((m) => m.excluded).length,
       episodes: [...this.episodes],
+      steps: [...this.steps],
+      outOfLockSinceAt: this.open?.firstBadAt ?? null,
       fittedPeriodMs: fitted,
-      periodPpm: fitted === null ? null : ((fitted - this.periodMs) / this.periodMs) * 1e6,
+      periodPpm: fitted === null ? null : ((fitted - P) / P) * 1e6,
     }
   }
 }

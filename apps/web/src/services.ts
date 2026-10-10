@@ -2,7 +2,7 @@
 
 import { create } from 'zustand'
 import { SpotifyClock } from './clock/SpotifyClock'
-import { offsetFor } from './clock/offsets'
+import { offsetFor, startBiasStore } from './clock/offsets'
 import { log } from './debug/log'
 import { fetchPlayer } from './spotify/api'
 import { loadTokens, sp1Record, type Sp1Record } from './spotify/auth'
@@ -10,6 +10,7 @@ import { loadTokens, sp1Record, type Sp1Record } from './spotify/auth'
 export const clock = new SpotifyClock({
   fetchPlayer,
   offsetFor,
+  startBias: startBiasStore,
   onError: (err) => log('warn', 'clock.poll_failed', { err: String(err) }),
 })
 

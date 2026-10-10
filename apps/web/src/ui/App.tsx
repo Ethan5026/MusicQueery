@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { setOffset } from '../clock/offsets'
+import { setOffset, startBiasStore } from '../clock/offsets'
 import { BUILD, SPOTIFY_CLIENT_ID, isStandalone, redirectUri } from '../config'
 import { flush, log, onLog, recent, remote, session } from '../debug/log'
 import type { DriftPoint, Summary } from '../probe/analysis'
@@ -125,6 +125,10 @@ function NowCard() {
         <dd>{clock.samples.length}</dd>
         <dt>device offset</dt>
         <dd>{fmtMs(clock.offsetMs)}</dd>
+        <dt>start bias (now / learned)</dt>
+        <dd>
+          {fmtMs(clock.biasMs)} / {fmtMs(startBiasStore.get(s?.deviceId ?? null))}
+        </dd>
         {clock.lastError !== null && (
           <>
             <dt>error</dt>
@@ -234,7 +238,17 @@ function ProbeCard() {
         <>
           <dl className="kv">
             <dt>state</dt>
-            <dd>{probe.running ? (s.calibrated ? 'measuring' : 'calibrating (20 s)…') : 'stopped'}</dd>
+            <dd>
+              {!probe.running ? (
+                'stopped'
+              ) : !s.calibrated ? (
+                'calibrating (20 s)…'
+              ) : s.outOfLockSinceAt !== null ? (
+                <span className="warn">out of lock for {((now - s.outOfLockSinceAt) / 1000).toFixed(1)} s</span>
+              ) : (
+                <span className="ok">in lock</span>
+              )}
+            </dd>
             <dt>elapsed</dt>
             <dd>{fmtTime(elapsed).slice(0, -4)}</dd>
             <dt>clicks heard / kept</dt>
@@ -244,8 +258,11 @@ function ProbeCard() {
             </dd>
             <dt>last drift</dt>
             <dd>{fmtMs(lastDrift)}</dd>
-            <dt>measured for</dt>
-            <dd>{fmtTime(s.measuredForMs).slice(0, -4)}</dd>
+            <dt>measured</dt>
+            <dd>
+              {s.points} clicks over {fmtTime(s.measuredForMs).slice(0, -4)}
+              {s.excluded > 0 && ` (${s.excluded} re-lock clicks left out)`}
+            </dd>
             <dt>median |drift|</dt>
             <dd className={grade(s.medianAbsMs, 60)}>{fmtMs(s.medianAbsMs, 1)}</dd>
             <dt>p95 |drift|</dt>
@@ -256,8 +273,10 @@ function ProbeCard() {
             <dd>{s.slopeMsPerMin === null ? '–' : `${s.slopeMsPerMin.toFixed(2)} ms/min`}</dd>
             <dt>tempo check</dt>
             <dd>{s.periodPpm === null ? '–' : `${s.periodPpm.toFixed(0)} ppm vs ${bpm} BPM`}</dd>
+            <dt>clock steps (Spotify resync)</dt>
+            <dd>{s.steps.length ? s.steps.map((x) => `${x.sizeMs.toFixed(0)} ms`).join(', ') : 'none'}</dd>
             <dt>phase (offset if click 1 is at 0 ms)</dt>
-            <dd>{fmtMs(s.calibrationPhaseMs, 0)}</dd>
+            <dd>{fmtMs(s.referencePhaseMs, 0)}</dd>
           </dl>
           <DriftPlot points={probe.analyzer.points} />
           <Episodes s={s} />

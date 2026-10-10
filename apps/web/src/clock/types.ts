@@ -1,6 +1,8 @@
 // Every screen reads position from a Clock (D-16): SpotifyClock | AudioClock | ManualClock.
 
-export type JumpKind = 'lock' | 'seek' | 'track' | 'play' | 'pause' | 'idle'
+// 'resync': Spotify's `timestamp` changed with no user action: the playing device sent a fresh
+// position report, often ~300 ms off the server's extrapolation after a start or seek (SP2).
+export type JumpKind = 'lock' | 'seek' | 'track' | 'play' | 'pause' | 'resync' | 'idle'
 
 export interface JumpEvent {
   /** performance.now() when the jump was detected. */

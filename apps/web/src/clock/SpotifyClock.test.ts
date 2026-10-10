@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { SpotifyClock, estimateOrigin, type PlayerReading, type PlayerSample } from './SpotifyClock'
+import { SpotifyClock, estimateOrigin, memoryBiasStore, type PlayerReading, type PlayerSample } from './SpotifyClock'
 import type { JumpEvent } from './types'
 
 const base: PlayerReading = {
@@ -78,6 +78,46 @@ describe('SpotifyClock', () => {
     c.ingest(sample(2000, 0, 30, 30, { status: 204, progressMs: null, trackId: null }))
     expect(jumps.at(-1)?.kind).toBe('idle')
     expect(c.locked).toBe(false)
+  })
+
+  test('a new Spotify timestamp re-anchors at once (resync)', () => {
+    const { c, jumps } = clock()
+    for (let i = 0; i < 10; i++) c.ingest(sample(i * 1000, 10_000 + i * 1000, 30, 30, { timestamp: 1 }))
+    // The device reports again: the true position is 310 ms behind the extrapolation.
+    c.ingest(sample(10_000, 19_690, 30, 30, { timestamp: 2 }))
+    expect(jumps.at(-1)?.kind).toBe('resync')
+    expect(c.positionMs(11_000)).toBe(20_690)
+  })
+
+  test('learns a start bias from a resync after a seek and applies it to the next seek', () => {
+    const { c, jumps } = clock()
+    c.ingest(sample(0, 10_000, 30, 30, { timestamp: 1 }))
+    c.ingest(sample(1000, 60_000, 30, 30, { timestamp: 2 })) // seek: reports run 300 ms ahead
+    expect(jumps.at(-1)?.kind).toBe('seek')
+    expect(c.biasMs).toBe(0)
+    c.ingest(sample(3000, 61_700, 30, 30, { timestamp: 3 })) // device resyncs: 300 ms behind
+    expect(jumps.at(-1)?.kind).toBe('resync')
+    expect(c.positionMs(3000)).toBe(61_700)
+    c.ingest(sample(10_000, 120_000, 30, 30, { timestamp: 4 })) // next seek, optimistic again
+    expect(jumps.at(-1)?.kind).toBe('seek')
+    expect(c.biasMs).toBe(-300)
+    expect(c.positionMs(10_000)).toBe(119_700)
+    c.ingest(sample(12_000, 121_700, 30, 30, { timestamp: 5 })) // resync agrees with the bias
+    expect(c.biasMs).toBe(0)
+    expect(c.positionMs(12_000)).toBe(121_700)
+  })
+
+  test('resuming a pause at the same position gets no start bias', () => {
+    const bias = memoryBiasStore()
+    bias.set('dev', -300)
+    const c = new SpotifyClock({ fetchPlayer: async () => base, now: () => 0, startBias: bias })
+    c.ingest(sample(0, 10_000, 30, 30, { timestamp: 1 }))
+    c.ingest(sample(1000, 11_000, 30, 30, { timestamp: 2, isPlaying: false }))
+    c.ingest(sample(2000, 11_000, 30, 30, { timestamp: 3 }))
+    expect(c.biasMs).toBe(0)
+    c.ingest(sample(3000, 11_000, 30, 30, { timestamp: 4, isPlaying: false }))
+    c.ingest(sample(4000, 0, 30, 30, { timestamp: 5 })) // play from the start: fresh
+    expect(c.biasMs).toBe(-300)
   })
 
   test('adds the device offset', () => {

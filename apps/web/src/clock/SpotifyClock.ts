@@ -1,10 +1,19 @@
 // SpotifyClock (D-03, D-16): polls GET /me/player, places each sample at the midpoint of its
 // request (RTT/2 correction), and interpolates with performance.now() in between.
 //
-// Spotify's `timestamp` is when playback state last changed, not when progress_ms was sampled,
-// so it is logged but not used. While playing, each sample estimates the "origin": the
-// performance time at which the track was at 0 ms. The estimate is the median origin of the
-// lowest-RTT third of the samples since the last jump, because a short round trip bounds the error.
+// While playing, each sample estimates the "origin": the performance time at which the track was
+// at 0 ms. The estimate is the median origin of the lowest-RTT third of the samples since the
+// last jump, because a short round trip bounds the error.
+//
+// Spotify's `timestamp` is when the playing device last reported its state; between reports the
+// server extrapolates progress_ms. A device can report again with no user action, moving the
+// position by a few hundred ms (measured in M1 on a Fire TV: −310 ms 30 s after a start, −290 ms
+// 1.9 s after a seek). A new timestamp therefore starts a new segment ('resync').
+//
+// That correction repeats per device: after every fresh start (seek, skip, or play from a new
+// position), the reports run ahead of the audio until the device resyncs. Resuming a pause at the
+// same position is not affected (the audio is still buffered). So each resync after a fresh start
+// teaches a per-device "start bias", applied from the next fresh start until its resync.
 
 import type { Clock, JumpEvent, JumpKind } from './types'
 
@@ -44,12 +53,35 @@ export interface SpotifyClockOptions {
   window?: number
   /** Per-output-device offset (ms) added to the position; negative = audio lags. */
   offsetFor?: (deviceId: string | null) => number
+  /** Learned per-device start bias (see above). Defaults to memory only. */
+  startBias?: BiasStore
   onError?: (err: unknown) => void
 }
+
+export interface BiasStore {
+  get(deviceId: string | null): number
+  set(deviceId: string, ms: number): void
+}
+
+export function memoryBiasStore(): BiasStore {
+  const m = new Map<string, number>()
+  return { get: (id) => (id ? (m.get(id) ?? 0) : 0), set: (id, ms) => void m.set(id, ms) }
+}
+
+/** A resync within this window of a fresh start teaches the bias. */
+const BIAS_LEARN_WINDOW_MS = 60_000
+const BIAS_MAX_MS = 1500
 
 interface Segment {
   trackId: string | null
   playing: boolean
+  timestamp: number | null
+  deviceId: string | null
+  /** Started by a seek, skip, or play from a new position (or the first lock). */
+  fresh: boolean
+  startedAt: number
+  /** Start bias applied to this segment (0 once the device has resynced). */
+  bias: number
   /** Origins (perf ms at track position 0) with their RTTs; only while playing. */
   origins: { origin: number; rtt: number }[]
   /** Position while paused. */
@@ -81,6 +113,7 @@ export class SpotifyClock implements Clock {
       jumpThresholdMs: 400,
       window: 12,
       offsetFor: () => 0,
+      startBias: memoryBiasStore(),
       ...options,
     }
   }
@@ -101,11 +134,16 @@ export class SpotifyClock implements Clock {
     return this.opt.offsetFor(this.last?.deviceId ?? null)
   }
 
-  /** Position from Spotify's report alone, before the device offset. */
+  /** Start bias applied right now (ms). */
+  get biasMs(): number {
+    return this.seg?.playing ? this.seg.bias : 0
+  }
+
+  /** Position from Spotify's report and the start bias, before the device offset. */
   rawPositionMs(at = this.opt.now()): number {
     const s = this.seg
     if (!s) return 0
-    return s.playing ? at - s.origin : s.pausedMs
+    return s.playing ? at - s.origin + s.bias : s.pausedMs
   }
 
   positionMs(at = this.opt.now()): number {
@@ -206,16 +244,33 @@ export class SpotifyClock implements Clock {
     else if (s.trackId !== sample.trackId) kind = 'track'
     else if (s.playing !== sample.isPlaying) kind = sample.isPlaying ? 'play' : 'pause'
     else if (Math.abs(progress - before) > this.opt.jumpThresholdMs) kind = 'seek'
+    else if (s.timestamp !== sample.timestamp) kind = 'resync'
+
+    if (kind === 'resync' && s && s.playing && s.fresh) {
+      const delta = progress - (tMid - s.origin)
+      if (tMid - s.startedAt < BIAS_LEARN_WINDOW_MS && Math.abs(delta) < BIAS_MAX_MS && sample.deviceId) {
+        const prev = this.opt.startBias.get(sample.deviceId)
+        this.opt.startBias.set(sample.deviceId, prev === 0 ? delta : (prev + delta) / 2)
+      }
+    }
 
     if (kind) {
+      const moved = kind === 'play' && s !== null && Math.abs(progress - s.pausedMs) > this.opt.jumpThresholdMs
+      const startedFresh = kind === 'seek' || kind === 'track' || moved
+      const bias = sample.isPlaying && startedFresh ? this.opt.startBias.get(sample.deviceId) : 0
       this.seg = {
         trackId: sample.trackId,
         playing: sample.isPlaying,
+        timestamp: sample.timestamp,
+        deviceId: sample.deviceId,
+        fresh: startedFresh || kind === 'lock',
+        startedAt: sample.t1,
+        bias,
         origins: sample.isPlaying ? [{ origin, rtt }] : [],
         pausedMs: progress,
         origin,
       }
-      this.emit({ at: sample.t1, kind, fromMs: before, toMs: progress, trackId: sample.trackId })
+      this.emit({ at: sample.t1, kind, fromMs: before, toMs: progress + bias, trackId: sample.trackId })
       return true
     }
 

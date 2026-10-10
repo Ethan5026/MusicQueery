@@ -44,7 +44,7 @@ describe('DriftAnalyzer', () => {
     run(a, 0, 600_000, { err: (at) => (at / 60_000) * 10 }) // +10 ms per minute
     const s = a.summary()
     expect(s.slopeMsPerMin).toBeCloseTo(10, 1)
-    expect(s.maxAbsMs).toBeGreaterThan(90)
+    expect(s.maxAbsMs).toBeGreaterThan(45) // ±50 ms around the whole-run reference
   })
 
   test('noise clicks off the grid are rejected', () => {
@@ -82,6 +82,27 @@ describe('DriftAnalyzer', () => {
     expect(e.kind).toBe('play')
     expect(e.relockMs).toBeLessThanOrEqual(1500)
     expect(e.relockMs).toBeGreaterThanOrEqual(800)
+  })
+
+  test('a silent clock step is recorded, recalibrated, and the majority state is the reference', () => {
+    const a = new DriftAnalyzer({ periodMs: P })
+    run(a, 0, 30_000)
+    // Spotify resyncs: from 30 s the clock reads 310 ms less, with no user jump.
+    run(a, 30_000, 300_000, { trackOffset: 30_000, err: () => -310 })
+    const s = a.summary()
+    expect(s.steps).toHaveLength(1)
+    expect(s.steps[0]!.sizeMs).toBeCloseTo(190, 6) // −310 ≡ +190 on a 500 ms grid
+    expect(s.outOfLockSinceAt).toBeNull()
+    expect(s.medianAbsMs).toBeCloseTo(0, 6)
+    expect(s.maxAbsMs).toBeCloseTo(190, 6)
+    expect(s.episodes.map((e) => e.kind)).toEqual(['drift'])
+  })
+
+  test('out of lock is visible while an episode is open', () => {
+    const a = new DriftAnalyzer({ periodMs: P })
+    run(a, 0, 30_000)
+    run(a, 30_000, 31_000, { trackOffset: 30_000, err: () => 200 + Math.random() * 100 })
+    expect(a.summary().outOfLockSinceAt).not.toBeNull()
   })
 
   test('a skip ends when the clock sees the new track, which then calibrates', () => {
