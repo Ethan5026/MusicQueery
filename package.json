@@ -13,8 +13,8 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "deploy:web": "pnpm --filter @mq/web build && pnpm --filter @mq/worker exec wrangler pages deploy ../web/dist --project-name musicqueery --branch main --commit-dirty=true",
-    "deploy:worker": "pnpm --filter @mq/worker deploy"
+    "ship": "pnpm --filter @mq/web build && pnpm --filter @mq/worker run deploy",
+    "tail": "pnpm --filter @mq/worker tail"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

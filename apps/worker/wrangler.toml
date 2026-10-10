@@ -1,9 +1,16 @@
-name = "musicqueery-api"
+name = "musicqueery"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
+# One Worker serves the PWA (static assets from apps/web/dist) and the API under /api/* (D-23).
+[assets]
+directory = "../web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
 [vars]
-ALLOWED_ORIGINS = "https://musicqueery.pages.dev,http://127.0.0.1:5173,http://localhost:5173"
+ALLOWED_ORIGINS = "https://musicqueery.ethangruening.workers.dev,http://127.0.0.1:5173"
 
 # Remote device logs are console.log'd: `pnpm --filter @mq/worker tail` live, Workers Logs for 3 days.
 [observability]
@@ -11,4 +18,4 @@ enabled = true
 
 [[kv_namespaces]]
 binding = "STORE"
-id = "REPLACE_WITH_KV_ID"
+id = "26a5977cef084e7b88f5336d9f83d302"

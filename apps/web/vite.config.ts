@@ -15,7 +15,11 @@ export default defineConfig({
   define: {
     __BUILD__: JSON.stringify(`${gitSha()}·${new Date().toISOString().slice(5, 16).replace('T', ' ')}`),
   },
-  server: { port: 5173, strictPort: true },
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: { '/api': { target: 'https://musicqueery.ethangruening.workers.dev', changeOrigin: true } },
+  },
   // Never inline scripts as data: URLs; the AudioWorklet module must load from our origin.
   build: { assetsInlineLimit: (file) => (file.endsWith('.js') ? false : undefined) },
   plugins: [
@@ -41,6 +45,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
         cleanupOutdatedCaches: true,
       },

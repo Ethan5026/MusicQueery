@@ -1,5 +1,6 @@
 export const SPOTIFY_CLIENT_ID: string = import.meta.env.VITE_SPOTIFY_CLIENT_ID ?? ''
-export const API_URL: string = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+// Same origin in production (the Worker serves both); Vite proxies /api in dev.
+export const API_URL: string = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
 export const BUILD: string = __BUILD__
 
 export const SPOTIFY_SCOPES = [
