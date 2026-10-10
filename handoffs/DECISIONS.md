@@ -36,6 +36,25 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   give exact chords with no analysis, using the app's own clock in place of Spotify sync.
 - **D-13** (S1) Proposed milestones now M1–M7, with M6 = Backing tracks. S2 finalises.
 
+- **D-14** (S2, supersedes D-10) No Mac and no Apple Developer membership, so the app is an installable PWA
+  (Safari → Add to Home Screen), served over HTTPS from Cloudflare Pages. No Expo, EAS or TestFlight.
+- **D-15** (S2) Stack: pnpm monorepo, TypeScript strict. `apps/web` is Vite + React 19 + Zustand + vite-plugin-pwa +
+  IndexedDB. `packages/theory` (pure TS) and `packages/model` (zod schemas → JSON Schema). Vitest, Playwright WebKit.
+- **D-16** (S2) Architecture: every screen is derived from a Timeline v1 and a position from a Clock
+  (SpotifyClock | AudioClock | ManualClock) through a pure `theory.moment()`. No screen talks to Spotify directly.
+- **D-17** (S2) Timeline store: Cloudflare Worker + KV keyed by Spotify track ID (or chart ID), one bearer secret.
+  Also takes remote debug logs, and may act as the Spotify token broker if SP1 fails.
+- **D-18** (S2) Companion: Python 3.12 (uv) analysis pipeline with a small native capture helper for per-process
+  loopback (SP3). Captured audio is deleted after analysis; only timelines are stored.
+- **D-19** (S2) The user has Spotify Premium, so playback control (play, seek, A–B loop, play-alongs) is in scope.
+- **D-20** (S2) Charts and timelines use the project's own versioned JSON schemas. iReal Pro `irealb://` playlists
+  are imported by a TS parser into Chart v1.
+- **D-21** (S2) Band engine runs on Web Audio: a look-ahead scheduler on the audio clock with sampled piano, bass and
+  drums (Tone.js or smplr, decided by SP5). Generated tracks emit an exact Timeline.
+- **D-22** (S2, supersedes D-13) Milestones: M1 Sync spike · M2 Theory + chart model · M3 Companion + store ·
+  M4 Shell + Stand · M5 Live wiring + Lead sheet · M6 Backing tracks · M7 Listening live + Predicted ·
+  M8 Map, Coach, polish. Exit criteria in `handoffs/02-dev-plan.md`.
+
 ## Pending
 
 (none)

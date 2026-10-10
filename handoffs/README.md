@@ -18,15 +18,17 @@ Older handoffs are history. Don't load them unless the current handoff points to
 | S0 | Brief and research | `00-brief.md` | Requirements and constraints written down |
 | S1 | Design sketches | `01-design.md` | User approves designs and answers P-01..P-04 |
 | S2 | Development plan | `02-dev-plan.md` | Stack, architecture, final milestone list, risks |
-| M1 | Spotify sync spike | `M1-sync.md` | Measured playhead drift on a real device |
-| M2 | Theory engine | `M2-theory.md` | Tested package: chords, transposition, scales, guide tones |
-| M3 | Chord timeline source | `M3-analysis.md` | Timeline JSON produced for real tracks |
-| M4 | App shell and Stand | `M4-stand.md` | Portrait Stand screen running on a recorded timeline |
-| M5 | Live wiring and Lead sheet | `M5-live.md` | Live sync + timeline, landscape lead sheet |
-| M6 | Backing tracks | `M6-backing.md` | In-app band plays a chart, chart import, drills, Spotify play-along search |
-| M7 | Map, Coach, TestFlight | `M7-ship.md` | Installed on the user's iPhone |
+| M1 | Sync spike | `M1-sync.md` | PWA on the iPhone, measured playhead drift |
+| M2 | Theory engine + chart model | `M2-theory.md` | Tested packages: chords, transposition, scales, guide tones, iReal parser |
+| M3 | Companion + timeline store | `M3-analysis.md` | Timeline JSON produced for real tracks, served by the Worker |
+| M4 | App shell + Stand | `M4-stand.md` | Portrait Stand screen running on a recorded timeline |
+| M5 | Live wiring + Lead sheet | `M5-live.md` | Live sync + timeline, landscape lead sheet |
+| M6 | Backing tracks | `M6-backing.md` | In-app band plays a chart, iReal import, drills, Spotify play-along |
+| M7 | Listening live + Predicted | `M7-listen.md` | Mic chord detection, predicted chords, chart alignment, chord fixes |
+| M8 | Map, Coach, polish | `M8-polish.md` | All five tabs used in a week of real practice |
 
-S2 may rename, split or reorder M1–M7. If it does, it updates this table.
+Milestones were finalised in S2 (D-22). Later stages may split or reorder them, and update this table if they do.
+
 
 ## Rules for writing a handoff
 

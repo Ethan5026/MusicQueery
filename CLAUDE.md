@@ -5,8 +5,8 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**S2 · Development plan — not started.**
-Read `handoffs/DECISIONS.md`, then `handoffs/01-design.md`. Nothing else is needed to resume.
+**M1 · Sync spike — not started.**
+Read `handoffs/DECISIONS.md`, then `handoffs/02-dev-plan.md`. Nothing else is needed to resume.
 
 ## Session protocol (keeps context small)
 
