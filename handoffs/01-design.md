@@ -1,7 +1,7 @@
 # S1 · Design sketches
 
-**Status:** awaiting approval · 2026-10-10 · **Next:** S2
-**Commit:** draft pushed with S0. The approval commit closes this stage.
+**Status:** done · 2026-10-10 · **Next:** S2
+**Commit:** `S1: designs approved` (pushed to origin/main)
 
 ## Goal of this stage
 Interactive sketches of every main screen, approved by the user before planning development.
@@ -14,9 +14,10 @@ Interactive sketches of every main screen, approved by the user before planning 
 ## Screens
 | Screen | Orientation | Contents |
 |---|---|---|
-| Stand | Portrait | Now playing + sync badge, Home/Now key chips, BPM, metre, large current chord + Roman numeral + beat dots, Up next ×4 with beat countdown, key-change countdown card, scale panel (scale, alternative, notes, 2-octave keyboard, guide-tone motion), tab bar |
-| Lead sheet | Landscape | 4-bar-per-line chart, rehearsal letters, key-change marks, brass playhead, scrolls a line at a time. Right rail: chord, function, next, scale, keyboard |
+| Stand | Portrait | Now playing + sync badge, Home/Now key chips, BPM, metre, large current chord + Roman numeral + beat dots, Up next ×4 with beat countdown, key-change countdown card, Play card (scale + alternative, treble staff with chord stack then scale and note names, Staff/Keys switch, guide-tone motion), 5-tab bar |
+| Lead sheet | Landscape | 4-bar-per-line chart, rehearsal letters, key-change marks, brass playhead, scrolls a line at a time. Right rail: chord, function, next, scale on staff (or keyboard) |
 | Song map | Portrait | Row per pass (intro/head/solos/ending), key bands coloured by circle-of-fifths position, tap to seek, key-area totals, loop a span |
+| Backing tracks | Portrait | Search, Generated / On Spotify / Drills tabs, rows with key swatch and source badge, band card (mute piano/bass/drums, tempo, key, style, count-in) |
 | Scale coach | Portrait | Next 8 changes with scale under Inside/Bebop/Colour lens, note to land on (3rd), ii–V–I guide-tone tip |
 | States | — | Sync: locked/re-syncing/paused/not connected. Source: Analysed/Live/Predicted. Empty state. Settings list |
 
@@ -30,14 +31,18 @@ Interactive sketches of every main screen, approved by the user before planning 
 Transposition by letter and semitone, chord-tone spelling, scale choice by quality and function,
 Roman numerals, guide-tone nearest-move, ii–V–I detection. See the `<script>` block of the sketch.
 
-## Open (user)
-- [ ] P-01 approve / change list
-- [ ] P-02 alto, tenor, both
-- [ ] P-03 chord source (recommendation: A + B hybrid)
-- [ ] P-04 Mac available?
+## Decisions
+- D-08 both saxes · D-09 companion + mic · D-10 Windows, Expo + EAS
+- D-11 scale and chord on treble staff · D-12 Tracks tab, three sources · D-13 milestones M1–M7
 
-## On approval
-Move P-01..P-04 into D-xx, set Status to done, update CLAUDE.md to S2, commit `S1: designs approved`, push.
+## Open (next stage)
+- [ ] S2: pick the audio engine for generated tracks in Expo (sampler or soundfont playback with sample-accurate scheduling)
+- [ ] S2: check the iReal Pro playlist format and parsing; decide how charts are stored
+- [ ] S2: Spotify playback control (start/seek for loops and play-alongs) needs Premium. Confirm the user has it.
+- [ ] S2: Apple Developer Program membership ($99/yr) is needed for TestFlight
+
+## Skip
+- `design/sketchbook.html`: everything visual is summarised above. Open only its `<script>` block for the theory engine (port in M2) or `staffSVG()` (staff rendering).
 
 ## Next prompt
 ```

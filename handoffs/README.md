@@ -23,9 +23,10 @@ Older handoffs are history. Don't load them unless the current handoff points to
 | M3 | Chord timeline source | `M3-analysis.md` | Timeline JSON produced for real tracks |
 | M4 | App shell and Stand | `M4-stand.md` | Portrait Stand screen running on a recorded timeline |
 | M5 | Live wiring and Lead sheet | `M5-live.md` | Live sync + timeline, landscape lead sheet |
-| M6 | Map, Coach, TestFlight | `M6-ship.md` | Installed on the user's iPhone |
+| M6 | Backing tracks | `M6-backing.md` | In-app band plays a chart, chart import, drills, Spotify play-along search |
+| M7 | Map, Coach, TestFlight | `M7-ship.md` | Installed on the user's iPhone |
 
-S2 may rename, split or reorder M1–M6. If it does, it updates this table.
+S2 may rename, split or reorder M1–M7. If it does, it updates this table.
 
 ## Rules for writing a handoff
 

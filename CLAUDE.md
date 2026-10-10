@@ -5,7 +5,7 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**S1 · Design sketches — awaiting user approval.**
+**S2 · Development plan — not started.**
 Read `handoffs/DECISIONS.md`, then `handoffs/01-design.md`. Nothing else is needed to resume.
 
 ## Session protocol (keeps context small)

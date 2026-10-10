@@ -18,9 +18,24 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
 - **D-07** (S0) Process: one session per stage, handoffs per `handoffs/README.md`, commit and push to
   origin/main at the end of every stage.
 
-## Pending (resolve at the end of S1)
+- **D-08** (S1, was P-02) Saxophone views: both E♭ alto and B♭ tenor in the quick toggle, alto first. Concert stays the piano view.
+- **D-09** (S1, was P-03) Chord timeline source: Windows desktop companion (per-process WASAPI loopback of the
+  Spotify app → analysis → timeline keyed by Spotify track ID) plus live detection from the phone mic,
+  sharing one timeline cache. Predicted-from-form fills gaps (D-04).
+- **D-10** (S1, was P-04) No Mac. Build with Expo/React Native from Windows, with EAS cloud builds and TestFlight.
+  Native audio work goes in Expo native modules, kept small so they can be ported.
+- **D-11** (S1, was P-01) Scale suggestions are drawn on a treble staff: the current chord stacked as whole
+  notes, a barline, then the scale ascending through the octave with note names underneath. Accidentals
+  are written on every note (no key signature). Brass = chord tones, steel = guide tones. Sax views
+  show written pitch. A Staff/Keys switch swaps in the keyboard. Landscape rail uses the same setting.
+- **D-12** (S1, was P-01) New Tracks tab (five tabs: Stand, Tracks, Map, Coach, Settings) with three
+  backing-track sources: **Generated** (in-app piano/bass/drums from a chord chart, with key, tempo
+  and style controls, per-instrument mute, and iReal Pro playlist import for a large standards library),
+  **On Spotify** (search play-along and minus-one recordings, analysed like any track), and **Drills**
+  (all-12-keys progressions, blues, Coltrane changes, modal vamps, drone). Generated and Drills tracks
+  give exact chords with no analysis, using the app's own clock in place of Spotify sync.
+- **D-13** (S1) Proposed milestones now M1–M7, with M6 = Backing tracks. S2 finalises.
 
-- **P-01** Approve the design direction (Stand, Lead sheet, Song map, Scale coach), or list changes.
-- **P-02** Saxophone: alto, tenor, or both. Sets the default transposition.
-- **P-03** Chord timeline source. Options in `00-brief.md` § Chord timeline options.
-- **P-04** Build machine and stack: Mac available (native SwiftUI) or Windows only (Expo/React Native + EAS cloud builds).
+## Pending
+
+(none)
