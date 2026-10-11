@@ -6,3 +6,6 @@ coverage/
 *.local
 .env.local
 .dev.vars
+
+# iReal corpus (shared playlists, kept out of git)
+packages/theory/corpus/

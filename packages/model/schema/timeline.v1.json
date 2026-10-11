@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "mq.timeline/1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "spotify:track:<id> or chart:<id>"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "analysed",
+        "live",
+        "predicted",
+        "exact"
+      ]
+    },
+    "durationMs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "generator": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "chartId": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "meter": {
+      "type": "object",
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "den": {
+          "type": "number",
+          "enum": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ]
+        }
+      },
+      "required": [
+        "num",
+        "den"
+      ]
+    },
+    "beats": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0
+      },
+      "description": "Beat onsets in ms, ascending"
+    },
+    "bars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Bar number within the form (1-based)"
+          },
+          "section": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "pass": {
+            "description": "Chorus / repeat pass, 1-based",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "chartBar": {
+            "description": "Index into Chart.bars when derived from a chart",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "startMs",
+          "number"
+        ]
+      }
+    },
+    "chords": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "startMs",
+          "endMs",
+          "symbol"
+        ]
+      }
+    },
+    "keys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "tonic": {
+            "type": "string",
+            "pattern": "^[A-G](?:♭{1,2}|♯{1,2})?$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "major",
+              "minor"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "startMs",
+          "endMs",
+          "tonic",
+          "mode"
+        ]
+      }
+    },
+    "tempo": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "bpm": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "startMs",
+          "bpm"
+        ]
+      }
+    },
+    "edits": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "startMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "prev": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "at",
+          "startMs",
+          "endMs",
+          "symbol"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "source",
+    "durationMs",
+    "createdAt",
+    "meter",
+    "beats",
+    "bars",
+    "chords",
+    "keys",
+    "tempo"
+  ]
+}

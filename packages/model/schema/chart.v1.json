@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "mq.chart/1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "composer": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "style": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "key": {
+      "type": "object",
+      "properties": {
+        "tonic": {
+          "type": "string",
+          "pattern": "^[A-G](?:♭{1,2}|♯{1,2})?$"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "major",
+            "minor"
+          ]
+        }
+      },
+      "required": [
+        "tonic",
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "meter": {
+      "type": "object",
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "den": {
+          "type": "number",
+          "enum": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ]
+        }
+      },
+      "required": [
+        "num",
+        "den"
+      ],
+      "additionalProperties": false
+    },
+    "tempo": {
+      "description": "BPM",
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 400
+    },
+    "choruses": {
+      "description": "Default number of times the form is played",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 99
+    },
+    "bars": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "chords": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "symbol": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "beats": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Duration in beats of the bar meter"
+                },
+                "alt": {
+                  "description": "Alternate chord printed above (iReal parentheses)",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                }
+              },
+              "required": [
+                "symbol",
+                "beats"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "meter": {
+            "description": "Time signature change starting at this bar",
+            "type": "object",
+            "properties": {
+              "num": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 32
+              },
+              "den": {
+                "type": "number",
+                "enum": [
+                  1,
+                  2,
+                  4,
+                  8,
+                  16
+                ]
+              }
+            },
+            "required": [
+              "num",
+              "den"
+            ],
+            "additionalProperties": false
+          },
+          "section": {
+            "description": "Rehearsal mark starting here: A, B, Intro, Verse…",
+            "type": "string",
+            "maxLength": 20
+          },
+          "repeatStart": {
+            "type": "boolean",
+            "const": true
+          },
+          "repeatEnd": {
+            "description": "Repeat sign at the end of this bar; total passes",
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 16
+          },
+          "ending": {
+            "description": "Volta (1st/2nd ending) starting at this bar",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9
+          },
+          "segno": {
+            "type": "boolean",
+            "const": true
+          },
+          "toCoda": {
+            "description": "Jump to the coda after this bar once a D.C./D.S. al Coda was taken",
+            "type": "boolean",
+            "const": true
+          },
+          "coda": {
+            "description": "Coda starts at this bar",
+            "type": "boolean",
+            "const": true
+          },
+          "jump": {
+            "description": "Taken at the end of this bar",
+            "type": "string",
+            "enum": [
+              "D.C.",
+              "D.C. al Fine",
+              "D.C. al Coda",
+              "D.S.",
+              "D.S. al Fine",
+              "D.S. al Coda"
+            ]
+          },
+          "fine": {
+            "type": "boolean",
+            "const": true
+          },
+          "end": {
+            "description": "iReal \"END\": where the final chorus stops",
+            "type": "boolean",
+            "const": true
+          },
+          "fermata": {
+            "type": "boolean",
+            "const": true
+          },
+          "simile": {
+            "description": "Written as a bar repeat (%)",
+            "type": "boolean",
+            "const": true
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "chords"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ireal",
+            "manual",
+            "demo"
+          ]
+        },
+        "playlist": {
+          "type": "string"
+        },
+        "raw": {
+          "description": "Original encoded music string",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "key",
+    "meter",
+    "bars"
+  ],
+  "additionalProperties": false
+}
