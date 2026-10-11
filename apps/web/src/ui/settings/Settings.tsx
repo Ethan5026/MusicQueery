@@ -52,6 +52,23 @@ export function SettingsTab() {
           </p>
         </div>
         <div className="setrow">
+          <span className="lbl">Next scale (landscape)</span>
+          <Seg
+            name="set-next"
+            label="Next scale"
+            value={s.nextScale ? 'show' : 'hide'}
+            options={[
+              ['show', 'Show'],
+              ['hide', 'Hide'],
+            ]}
+            onChange={(v) => s.set({ nextScale: v === 'show' })}
+          />
+          <p className="set-hint">
+            Sideways, a second staff shows the next notes to change and how many beats until they do. Hide it for a
+            bigger staff of what to play now.
+          </p>
+        </div>
+        <div className="setrow">
           <span className="lbl">Scale lens (Advanced)</span>
           <Seg
             name="set-lens"

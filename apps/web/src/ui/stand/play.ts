@@ -79,7 +79,8 @@ function keyNotes(scale: string[], mode: MomentKey['mode'], changed: Set<string>
   }))
 }
 
-export function playView(m: Moment, mode: PlayMode): PlayView | null {
+/** `preview: false` keeps the staff on the key you're in until the change (the landscape Next staff shows the new one). */
+export function playView(m: Moment, mode: PlayMode, opts: { preview?: boolean } = {}): PlayView | null {
   if (mode === 'advanced' || !m.key) {
     if (!m.scale) return null
     const chord = m.tones.map((t) => ({ name: t.name, slot: t.slot }))
@@ -115,7 +116,7 @@ export function playView(m: Moment, mode: PlayMode): PlayView | null {
   if (kc && kc.inBeats <= 8) {
     const next = keyScale(kc.to)
     const changed = next.filter((n) => !scale.includes(n))
-    const soon = kc.inBeats <= 4
+    const soon = kc.inBeats <= 4 && opts.preview !== false
     return {
       ...base,
       // in the last bar the staff already shows the new key

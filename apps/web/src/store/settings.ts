@@ -16,9 +16,11 @@ export interface Settings {
   theme: Theme
   /** Play card: key-centre scale (simple), plus callouts (integrated), or chord-scales (advanced) */
   mode: PlayMode
+  /** landscape: a second staff with the next change of notes */
+  nextScale: boolean
 }
 
-export const DEFAULT_SETTINGS: Settings = { instrument: 'concert', lens: 'inside', notes: 'staff', theme: 'stage', mode: 'integrated' }
+export const DEFAULT_SETTINGS: Settings = { instrument: 'concert', lens: 'inside', notes: 'staff', theme: 'stage', mode: 'integrated', nextScale: true }
 
 interface SettingsState extends Settings {
   set: (patch: Partial<Settings>) => void
@@ -28,9 +30,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
   ...DEFAULT_SETTINGS,
   set: (patch) => {
     set(patch)
-    const { instrument, lens, notes, theme, mode } = get()
+    const { instrument, lens, notes, theme, mode, nextScale } = get()
     applyTheme(theme)
-    void idbSet('settings', 'prefs', { instrument, lens, notes, theme, mode })
+    void idbSet('settings', 'prefs', { instrument, lens, notes, theme, mode, nextScale })
   },
 }))
 

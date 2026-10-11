@@ -1,23 +1,27 @@
 // Lead sheet (landscape, sketch "Lead sheet"): the chart four bars to a line with a brass playhead sweeping the
-// current bar, scrolling a line at a time with the next line in view; tap a bar to seek there. The rail on the
-// right keeps the current chord, next chord and scale in fixed places. Same moment and settings as portrait.
+// current bar, scrolling a line at a time with the next line in view; tap a bar to seek there.
+// The play panel on the right is a two-staff system, named in the margin like the staves of a score: Now, in full
+// colour, and Next, the next point where the notes change, in muted ink with only the changing notes in rust and a
+// countdown that turns rust in the last four beats. Same moment, Play mode and Staff/Keys setting as portrait.
 import type { Timeline } from '@mq/model'
-import type { Moment } from '@mq/theory'
+import { type Moment, INSTRUMENT_IDS, analyseTimeline } from '@mq/theory'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { activeTransport } from '../../services'
-import type { Settings } from '../../store/settings'
+import { type Settings, useSettings } from '../../store/settings'
 import type { TrackMeta } from '../../timeline/library'
-import { Acc, ChordSym } from '../atoms'
+import { Acc, ChordSym, Seg } from '../atoms'
 import { Keyboard } from './Keyboard'
 import { frameBus } from './live'
-import { playView } from './play'
+import { type NextResult, beatsUntil, nextChange } from './next'
+import { type PlayView, playView } from './play'
 import { type SheetBar, buildSheet, topRow } from './sheet'
 import { LiveSyncBadge, PlayIcon } from './Stand'
 import { Staff } from './Staff'
-import { barPosition, homeKey, keyText, sectionLabel, tempoAt } from './view'
+import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from './view'
 
 /** Lines in view at once. */
 const VISIBLE = 4
+const INSTRUMENT_SHORT = { concert: 'Concert', alto: 'E♭ alto', tenor: 'B♭ tenor' } as const
 
 export function LeadSheet({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m: Moment; settings: Settings }) {
   const inst = settings.instrument
@@ -39,7 +43,6 @@ export function LeadSheet({ tl, meta, m, settings }: { tl: Timeline; meta: Track
   const top = topRow(row, sheet.rows.length, VISIBLE)
 
   // The playhead sweeps the current bar every frame (D-44: no React work per frame).
-  const curBar = cur >= 0 ? tl.bars[cur] : undefined
   const span = useMemo(() => {
     const b = sheet.rows[row]?.find((x) => x.index === cur)
     return b ? { s: b.startMs, e: b.endMs } : null
@@ -56,35 +59,37 @@ export function LeadSheet({ tl, meta, m, settings }: { tl: Timeline; meta: Track
 
   const home = homeKey(tl, inst)
   const bpm = tempoAt(tl, m.positionMs)
-  const where = sectionLabel(tl, m.barIndex) ?? (curBar ? `Bar ${barPosition(tl, cur)?.n} / ${barPosition(tl, cur)?.total}` : 'Intro')
+  const pos = cur >= 0 ? barPosition(tl, cur) : null
+  const where = sectionLabel(tl, cur) ?? (pos ? `Bar ${pos.n} of ${pos.total}` : 'Count-in')
   const t = activeTransport()
 
   return (
     <div className="lapp" data-testid="lead-sheet">
       <div className="sheet">
-        <div className="sheet-h">
+        <header className="sheet-h">
           <button type="button" className="lplay" aria-label={t.clock.playing ? 'Pause' : 'Play'} onClick={() => t.toggle()}>
             <PlayIcon playing={t.clock.playing} />
           </button>
-          <span className="t">{meta.title}</span>
-          <span className="lbl">{where}</span>
-          <span className="sp" />
-          {home && (
-            <span className="chip">
-              <em>Home</em>
-              <b>
-                <Acc text={keyText(home)} />
-              </b>
+          <div className="sheet-id">
+            <span className="t">{meta.title}</span>
+            <span className="sub">
+              <span className="where">{where}</span>
+              {home && (
+                <span>
+                  Home <b>
+                    <Acc text={keyText(home)} />
+                  </b>
+                </span>
+              )}
+              {bpm !== null && (
+                <span>
+                  <b className="mono">{bpm}</b> bpm
+                </span>
+              )}
             </span>
-          )}
-          {bpm !== null && (
-            <span className="chip">
-              <b className="mono">{bpm}</b>
-              <em>BPM</em>
-            </span>
-          )}
+          </div>
           <LiveSyncBadge />
-        </div>
+        </header>
         <div className="rows-win" ref={win}>
           <div className="rows" style={{ transform: `translateY(${-top * rowH}px)` }}>
             {sheet.rows.map((r, ri) => (
@@ -97,7 +102,7 @@ export function LeadSheet({ tl, meta, m, settings }: { tl: Timeline; meta: Track
           </div>
         </div>
       </div>
-      <Rail m={m} settings={settings} />
+      <PlayPanel tl={tl} m={m} settings={settings} />
     </div>
   )
 }
@@ -132,64 +137,181 @@ const Bar = memo(function Bar({ bar, state }: { bar: SheetBar; state: '' | 'cur'
   )
 })
 
-function Rail({ m, settings }: { m: Moment; settings: Settings }) {
-  const view = playView(m, settings.mode)
-  const next = m.next[0]
+// Next is the same for every beat of a chord: computed once per chord, mode and instrument.
+const nextCache = new WeakMap<Timeline, Map<string, NextResult>>()
+function cachedNext(tl: Timeline, m: Moment, s: Settings): NextResult {
+  let byKey = nextCache.get(tl)
+  if (!byKey) nextCache.set(tl, (byKey = new Map()))
+  const key = `${m.eventIndex}|${s.mode}|${s.instrument}|${s.lens}`
+  let r = byKey.get(key)
+  if (!r) {
+    r = nextChange(tl, m, s.mode, { instrument: s.instrument, lens: s.lens })
+    byKey.set(key, r)
+  }
+  return r
+}
+
+function PlayPanel({ tl, m, settings }: { tl: Timeline; m: Moment; settings: Settings }) {
+  const set = useSettings((s) => s.set)
+  const now = playView(m, settings.mode, { preview: false })
+  const showNext = settings.nextScale
+  const res = showNext ? cachedNext(tl, m, settings) : null
+  const then = m.next[0]
+  const inst = settings.instrument
+  const nextInst = INSTRUMENT_IDS[(INSTRUMENT_IDS.indexOf(inst) + 1) % INSTRUMENT_IDS.length]!
+  const big = !showNext
+  const outside = now?.callout?.kind === 'outside' ? now.callout.changed : []
+
   return (
-    <aside className="rail" aria-label="Now">
-      <div className="row">
-        <span className="lbl">Now</span>
-        {m.key && (
-          <span className="chip now">
-            <b>
-              <Acc text={keyText(m.key)} />
-            </b>
+    <aside className="pp" aria-label="What to play">
+      <div className="pp-ctl">
+        <Seg
+          mini
+          name="lmode"
+          label="Suggestions"
+          value={settings.mode}
+          options={[
+            ['simple', 'Simple'],
+            ['integrated', 'Integrated'],
+            ['advanced', 'Advanced'],
+          ]}
+          onChange={(mode) => set({ mode })}
+        />
+        <Seg
+          mini
+          name="lnview"
+          label="Show notes as"
+          value={settings.notes}
+          options={[
+            ['staff', 'Staff'],
+            ['keys', 'Keys'],
+          ]}
+          onChange={(notes) => set({ notes })}
+        />
+      </div>
+
+      <div className="pp-now">
+        <div className="pp-chord" data-testid="rail-chord">
+          <ChordSym chord={m.chord} className="big" />
+        </div>
+        <div className="pp-meta">
+          <span className="pp-fn">
+            {m.fn && m.key ? (
+              <>
+                <b>
+                  <Acc text={m.fn.text} />
+                </b>{' '}
+                in <Acc text={keyText(m.key)} />
+              </>
+            ) : null}
           </span>
-        )}
-      </div>
-      <div className="rail-chord" data-testid="rail-chord">
-        <ChordSym chord={m.chord} className="big" />
-      </div>
-      <div className="row">
-        <span className="fn">{m.fn ? <Acc text={m.fn.text} /> : null}</span>
-        <div className="beats" aria-label={`Beat ${m.beatInBar + 1}`}>
-          {Array.from({ length: 4 }, (_, i) => (
-            <i key={i} className={(i === 0 ? 'one' : '') + (i === m.beatInBar && m.bar ? ' on' : '')} />
-          ))}
+          <div className="beats" aria-label={`Beat ${m.beatInBar + 1}`}>
+            {Array.from({ length: Math.min(tl.meter.num, 6) }, (_, i) => (
+              <i key={i} className={(i === 0 ? 'one' : '') + (i === m.beatInBar && m.bar ? ' on' : '')} />
+            ))}
+          </div>
+          <span className="pp-then">
+            {then ? (
+              <>
+                then <ChordSym chord={then.chord} /> in {then.inBeats}
+              </>
+            ) : (
+              'end'
+            )}
+          </span>
         </div>
       </div>
-      <div className="nx">
-        {next ? (
-          <>
-            <span className="lbl">Next</span>
-            <ChordSym chord={next.chord} />
-            <span className="mono">in {next.inBeats === 1 ? '1 beat' : `${next.inBeats} beats`}</span>
-          </>
-        ) : (
-          <span className="lbl">End</span>
-        )}
+
+      <div className={`system${showNext ? '' : ' solo'}`}>
+        <section className="sys-row sys-now" aria-label="Now">
+          <span className="sys-name">Now</span>
+          <div className="sys-body">
+            <div className="sys-h">
+              {now ? (
+                <b className="sys-title" data-testid="now-scale">
+                  <Acc text={now.title} />
+                </b>
+              ) : (
+                <b className="sys-title quiet">No chord</b>
+              )}
+              {outside.length > 0 && (
+                <span className="sys-alt">
+                  with{' '}
+                  {outside.map((n) => (
+                    <b key={n}>
+                      <Acc text={n} />
+                    </b>
+                  ))}
+                </span>
+              )}
+              <button
+                type="button"
+                className="lbl inst-btn"
+                title={`Switch to ${INSTRUMENT_SHORT[nextInst]}`}
+                onClick={() => set({ instrument: nextInst })}
+              >
+                <Acc text={m.instrumentLabel} />
+              </button>
+            </div>
+            {now && <Notes view={now} kind={settings.notes} big={big} />}
+          </div>
+        </section>
+
+        {showNext && res && <NextRow tl={tl} m={m} res={res} kind={settings.notes} />}
       </div>
-      {view && (
-        <>
-          <span className="sc">
-            <Acc text={view.title} />
-          </span>
-          {settings.notes === 'staff' ? (
-            <div className="staffbox">
-              <Staff chord={view.chord} notes={view.notes} s={6} g={view.chord ? 18 : 24} octave={false} names={false} />
-            </div>
-          ) : (
-            <div className="kb">
-              <Keyboard notes={view.notes} w={234} h={64} />
-            </div>
-          )}
-          {view.callout && (
-            <span className={`rail-callout ${view.callout.kind}`}>
-              <Acc text={view.callout.lead} />
-            </span>
-          )}
-        </>
-      )}
     </aside>
+  )
+}
+
+function NextRow({ tl, m, res, kind }: { tl: Timeline; m: Moment; res: NextResult; kind: Settings['notes'] }) {
+  const nx = res.next
+  if (!nx) {
+    const ev = analyseTimeline(tl).events
+    const lastEv = ev[res.lastEventIndex]
+    const atEnd = res.lastEventIndex >= ev.length - 1
+    const bar = lastEv ? barPosition(tl, barIndexAt(tl, lastEv.endMs - 1)) : null
+    return (
+      <section className="sys-row sys-next none" aria-label="Next">
+        <span className="sys-name">Next</span>
+        <p className="sys-same" data-testid="next-scale">
+          {atEnd ? 'Same notes to the end.' : `Same notes through bar ${bar?.n ?? '…'}.`}
+        </p>
+      </section>
+    )
+  }
+  const n = beatsUntil(nx.startBeat, m.beat)
+  const soon = n <= 4
+  return (
+    <section className={`sys-row sys-next${soon ? ' soon' : ''}`} aria-label="Next">
+      <span className="sys-name">Next</span>
+      <div className="sys-body">
+        <div className="sys-h">
+          <b className="sys-title" data-testid="next-scale">
+            <Acc text={nx.view.title} />
+          </b>
+          <span className="sys-when">
+            in <b className="mono">{n}</b> {n === 1 ? 'beat' : 'beats'}, on <ChordSym chord={nx.chord} />
+          </span>
+        </div>
+        <span className="sys-meter" aria-hidden="true">
+          <i style={{ width: `${Math.max(4, (1 - Math.min(n, 16) / 16) * 100)}%` }} />
+        </span>
+        <Notes view={nx.view} kind={kind} big={false} />
+      </div>
+    </section>
+  )
+}
+
+/** One staff (or keyboard) of the system. Both rows share a size so their notes line up for comparison. */
+function Notes({ view, kind, big }: { view: PlayView; kind: Settings['notes']; big: boolean }) {
+  return kind === 'staff' ? (
+    <div className="staffbox">
+      {/* The panel is width-bound: bigger noteheads come from a larger staff space with tighter note spacing. */}
+      <Staff chord={view.chord} notes={view.notes} s={big ? 11 : 8.5} g={big ? 31 : 29} octave names />
+    </div>
+  ) : (
+    <div className="kb">
+      <Keyboard notes={view.notes} w={320} h={big ? 112 : 80} />
+    </div>
   )
 }

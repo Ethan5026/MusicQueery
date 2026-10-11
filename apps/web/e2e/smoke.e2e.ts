@@ -156,3 +156,21 @@ test('works offline: shell from the service worker, timeline from IndexedDB, fon
   })
   expect(fonts).toEqual([true, true, true, true, true])
 })
+
+test('landscape lead sheet: Now and Next staves, modes switch in place', async ({ page }) => {
+  await page.goto('/')
+  await expect(hero(page)).toHaveText('B♭m7')
+  // chorus 2, bar 3 (E♭7) in A♭: the next change of notes is C major, on G7
+  await seek(page, Math.round((((4 + 36 + 2) * 4 + 1.05) * 60000) / 168))
+  await page.setViewportSize({ width: 874, height: 402 })
+  await expect(page.getByTestId('rail-chord')).toHaveText('E♭7')
+  await expect(page.getByTestId('now-scale')).toHaveText('A♭ major')
+  await expect(page.getByTestId('next-scale')).toHaveText('C major')
+  await expect(page.locator('.sys-when')).toContainText('in 11 beats, on G7')
+  await page.locator('label[for="lmode-advanced"]').click()
+  await expect(page.getByTestId('now-scale')).toHaveText('E♭ Mixolydian')
+  await expect(page.locator('.sys-next .st-nm.x')).toHaveText(['A', 'B', 'D', 'E'])
+  // the choice carries back to portrait
+  await page.setViewportSize({ width: 402, height: 778 })
+  await expect(page.locator('#pmode-advanced')).toBeChecked()
+})
