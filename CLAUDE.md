@@ -5,8 +5,9 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**M5 · Live wiring + Lead sheet — not started.**
-Read `handoffs/DECISIONS.md`, then `handoffs/M4-stand.md`. Its Next prompt names what M5 needs.
+**M5b · Playlist inbox — not started.**
+Read `handoffs/DECISIONS.md`, then `handoffs/M5-live.md`. Its Next prompt names what M5b needs.
+(M5b, M6, M7, M8 and M9 are independent; M5b goes first because 21 of the 28 tracks followed in M5 had no chords yet.)
 
 ## Session protocol (keeps context small)
 
@@ -27,7 +28,7 @@ Read `handoffs/DECISIONS.md`, then `handoffs/M4-stand.md`. Its Next prompt names
 
 - `apps/web` — the PWA (Vite + React). `apps/worker` — Cloudflare Worker: serves the PWA and `/api/*` (D-23)
 - `packages/theory`, `packages/model` — pure TS packages (M2). iReal corpus: `pnpm --filter @mq/theory corpus`
-- `companion/` — Windows companion, Python 3.12 + uv (M3): `pnpm companion <cmd>` (`analyse`, `bakeoff`, `login`…)
+- `companion/` — Windows companion, Python 3.12 + uv (M3): `pnpm companion <cmd>` (`analyse`, `watch`, `queue`, `login`…)
 - Commands: `pnpm dev`, `pnpm test`, `pnpm e2e` (Playwright WebKit), `pnpm lint`, `pnpm typecheck`, `pnpm ship` (deploy), `pnpm tail` (live device logs)
 - `design/sketchbook.html` — approved design source (published as an artifact; URL in 01-design.md)
 - `handoffs/` — stage handoffs, decision log, template (see `handoffs/README.md`)

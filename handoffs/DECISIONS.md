@@ -156,10 +156,35 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   re-capture of tracks analysed before it (audio is deleted, D-18). The Solo view gives the melody in written pitch for the instrument
   and the scale at full width. Independent of M5b–M8.
 
+- **D-49** (M5) Two drivers behind Stand: `spotify` (SpotifyClock) and `manual` (ManualClock). Spotify takes over on a lock, a
+  track change, or play; it loads the timeline by track ID (IndexedDB, then the store, re-checked in the background so a
+  re-analysed track replaces its cached copy). Opening a recorded track in Tracks hands back to the manual clock. When Spotify has
+  nothing active the chart holds where it was on the manual clock, paused. A logged-in first run shows "Nothing playing"; a
+  logged-out one opens the demo. Play/pause/seek on Stand go to Spotify on whatever device plays (seek aims for the chart position:
+  minus offset and start bias).
+- **D-50** (M5) Sync badge from `syncState()`: Not connected (logged out, or polls failing > 5 s), Re-syncing (first 1.2 s and two
+  samples of a segment, or no answer for > 2.5 s while playing), Paused, Not playing (no active device), else ±ms = half the best
+  RTT + median spread of the origins, rounded up to 10 ms. Departs from the sketch: the chart keeps moving while re-syncing rather
+  than freezing, since the music doesn't stop for a network hiccup.
+- **D-51** (M5) Calibration = tap-along on an analysed track: each tap's chart position against the nearest beat; after 2 warm-up
+  taps, taps more than a third of a beat off are ignored; median of the last ≤ 24 (min 8) is the correction, half the IQR shown as
+  steadiness. Earlier/Later nudge 10 ms. Offsets per Spotify device id in localStorage, with names, listed in Settings → Speakers.
+  No fixed allowance for human tap anticipation; the nudges cover it.
+- **D-52** (M5, user) Landscape Stand = lead sheet + play panel. Chart: 4 bars a line (new line at a rehearsal letter or pass),
+  chords sized by duration, a chord carried over from the bar before drawn faded, key marks, double bar at the end of a pass,
+  current row kept second from the top, tap a bar to seek. Panel: Play mode and Staff/Keys switches, the chord, and a two-staff
+  system named in the margin: Now (the Play mode's view, no key-change preview) and Next = the first coming chord whose notes
+  differ (16 chords ahead), muted with the changing notes in rust and a countdown that turns rust in the last 4 beats. Settings →
+  "Next scale" hides it for one larger staff. Both Stand screens have a Concert / Alto / Tenor switch (replacing the cycling button).
+- **D-53** (M5) Live e2e tests mock `/me/player` with a fake player and run with service workers blocked, because WebKit's
+  Playwright stops routing fetches once a service worker controls the page (the smoke suite's offline test still covers the SW).
+  A test fails if portrait Stand needs scrolling in any Play mode (it was already 6 px over before M5; the Play card was tightened).
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
   on standards and none on Let It Be (verse and chorus share chords), so analysed timelines carry no section labels. Decide by
   M5 (lead-sheet rehearsal letters) or M8 (Song map): chord-repetition analysis, a structure model, or chart alignment.
+  *M5: the lead sheet works without letters on analysed tracks (bar numbers, key marks); deferred to M7 or M8.*
 - **P-06** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
   Mas Que Nada's F minor (B♭m7–E♭7 bars). Main key right on 3 of 4 truth tracks. Revisit the emission weights with the truth set.
