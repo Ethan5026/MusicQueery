@@ -11,8 +11,8 @@ Worker store `PUT/GET /api/timelines/:id` with a bearer secret; the phone fetche
 - D-32 store API (public GET, bearer for writes/list, zod-validated) · D-33 SP3 C++ process-loopback capture, album-context play
 - D-34 SP4 pipeline: beat_this + regularise, 3-way root vote, jazz-gated lead-sheet 7ths · D-35 Spotify playlist quota
 - D-36 user: pop songs first, test songs from "Swinging and Shredding" · D-37 truth = chart chords on a madmom grid
-- After the stage (same day, user asked): D-38 sevenths step off by default · D-39 human-annotated yardstick (ChoCo)
-- P-05 sections (not shipped) · P-06 key-region errors · P-07 chart-informed recognition (Chordonomicon + Jump Alignment)
+- After the stage (same day, user asked): D-38 sevenths step off by default · D-39 human-annotated yardstick (ChoCo) · D-40 chart names
+- P-05 sections (not shipped) · P-06 key-region errors
 
 ## Built
 - `apps/worker/src/index.ts` — `/api/timelines` store (D-32); secret `API_SECRET` set with `wrangler secret put`
@@ -62,8 +62,9 @@ Worker store `PUT/GET /api/timelines/:id` with a bearer secret; the phone fetche
   Don't Stop Me Now, It's Too Late; Billboard: Just the Way You Are, Human Nature, Higher Ground; September skipped, no
   matching release). Offsets −1080…+300 ms; Higher Ground's peak is flat (one-chord vamp). `reports/annotated-bakeoff.json`
 - Human pop, per beat: vote 0.677 7ths / 0.840 majmin / 0.838 root; with lead-sheet 7ths 0.390 → default changed (D-38)
-- Chordonomicon (`%LOCALAPPDATA%\MusicQueery\dl\chordonomicon`, 264 MB, outside the repo): UG charts vs human 0.84–0.92 at
-  chord-change level where present; coverage 4/7 classics, 3/10 playlist (P-07)
+- Chordonomicon (CSV in `%LOCALAPPDATA%\MusicQueery\dl\chordonomicon`, index `%LOCALAPPDATA%\MusicQueery\chordonomicon.sqlite`):
+  UG charts vs human 0.84–0.92 at chord-change level; coverage 4/7 classics, 3/10 playlist. Built as chart names (D-40,
+  `companion/src/mqc/charts.py`, tests `tests/test_charts.py`); a new PC runs `pnpm companion chart-index` after the download
 - Store: 22 timelines. Re-analysed with the new default: all with saved audio. Still on the old 7ths output (need a replay):
   Zanzibar, Even Flow, As, Got to Get You Into My Life, It's a Man's Man's Man's World
 
@@ -72,7 +73,7 @@ Worker store `PUT/GET /api/timelines/:id` with a bearer secret; the phone fetche
       page; the designed screens start in M4. Yet they saw no Timeline card although the phone fetched (above) and logged no
       error. M4: check the first build on the phone with the user before going further (Playwright WebKit too, D-15)
 - [ ] M5/M8: P-05 sections; P-06 keys (Fly Me → A minor; B♭m7–E♭7 stretches called E♭ major)
-- [ ] user: re-analyse the 5 playlist tracks above (`pnpm companion analyse <ids>`, ~25 min playback) and decide P-07
+- [ ] aligned charts also know their sections (`<verse_1>`, `<chorus_1>`): a candidate source for P-05 section labels
 - [ ] Fly Me (big band + vocal) is the weak case: roots 0.63. Ideas: bass-weighted chroma, source separation, chart alignment (M7)
 - [ ] truth grids are from madmom, not human taps; `mqc tap` is ready if a hand-tapped check is wanted
 - [ ] Spotify: playlist endpoints quota-blocked until ≈ 2026-10-12 00:00 CDT (D-35); refresh tokens die ≈ 2027-04 (M1)

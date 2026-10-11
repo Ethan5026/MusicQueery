@@ -298,6 +298,7 @@ class Chords:
     sevenths: bool  # apply lead-sheet sevenths (jazz detected)
     share: float
     name: str
+    per: dict[str, Segments] | None = None  # each recogniser's raw output (for chart alignment)
 
 
 def recognise(audio: np.ndarray, sr: int, beats: Beats, recogniser: str = "auto") -> Chords:
@@ -310,7 +311,7 @@ def recognise(audio: np.ndarray, sr: int, beats: Beats, recogniser: str = "auto"
     per = {r: RECOGNISERS[r](audio, sr) for r in VOTE_WEIGHTS}
     share = seventh_share(per["btc"])
     jazz = recogniser == "auto+7ths" and share >= JAZZ_SEVENTH_SHARE
-    return Chords(vote(per, beats.beats, end), jazz, share, "vote+7ths" if jazz else "vote")
+    return Chords(vote(per, beats.beats, end), jazz, share, "vote+7ths" if jazz else "vote", per)
 
 
 # ---------------------------------------------------------------- beat sync + timeline
@@ -377,11 +378,13 @@ def build_timeline(
     source: str = "analysed",
     sevenths: bool = True,
     sections: list[tuple[int, int, str]] | None = None,
+    harte: bool = True,
 ) -> tuple[dict, list[str]]:
-    """Timeline v1 dict (validate with `validate_timeline`) and the labels the bridge could not read."""
+    """Timeline v1 dict (validate with `validate_timeline`) and the labels the bridge could not read. Segment labels
+    are Harte (recognisers) or, with `harte=False`, lead-sheet text (aligned charts)."""
     beats_ms = [round(float(t) * 1000, 1) for t in beats.beats]
     raw = [{"startMs": round(s * 1000, 1), "endMs": round(e * 1000, 1), "symbol": lab} for s, e, lab in segs]
-    fin = bridge.finish(raw, beats_ms, harte=True, sevenths=sevenths)
+    fin = bridge.finish(raw, beats_ms, harte=harte, sevenths=sevenths)
     num = meter_of(beats)
     bars = [{"startMs": round(float(t) * 1000, 1), "number": i + 1} for i, t in enumerate(beats.downbeats)]
     if sections:

@@ -26,13 +26,24 @@ def analyse_audio(
     recogniser: str = DEFAULT_RECOGNISER,
     beats: A.Beats | None = None,
     log=print,
+    sp=None,
 ) -> dict:
+    """With `sp` (a Spotify client), a published chart for the track supplies the chord names when its alignment
+    agrees with what we hear (D-40)."""
     t0 = time.time()
     beats = beats or A.track_beats(audio, sr)
     ch = A.recognise(audio, sr, beats, recogniser)
-    tl, unparsed = A.build_timeline(
-        track_id, duration_ms, beats, ch.segs, f"mqc/{ch.name}+beat_this", sevenths=ch.sevenths
-    )
+    named = chart_names(sp, track_id, audio, sr, beats, ch, log) if sp and ch.per and not ch.sevenths else None
+    if named:
+        segs, chart_id = named
+        tl, unparsed = A.build_timeline(
+            track_id, duration_ms, beats, segs, f"mqc/{ch.name}+chart-names+beat_this", sevenths=False, harte=False
+        )
+        tl["chartId"] = chart_id
+    else:
+        tl, unparsed = A.build_timeline(
+            track_id, duration_ms, beats, ch.segs, f"mqc/{ch.name}+beat_this", sevenths=ch.sevenths
+        )
     if unparsed:
         log(f"  unparsed labels (stored as N.C.): {sorted(set(unparsed))}")
     errs = A.validate_timeline(tl)
@@ -40,6 +51,33 @@ def analyse_audio(
         raise ValueError(f"timeline invalid: {errs[:5]}")
     log(f"  analysed in {time.time() - t0:.0f} s: {A.summary(tl)}")
     return tl
+
+
+CHART_MIN_AGREEMENT = 0.80  # D-40: Something's capo chart (0.74) and Fly Me's (0.71) fall below; good charts 0.87–0.97
+
+
+def chart_names(sp, track_id: str, audio: np.ndarray, sr: int, beats: A.Beats, ch: A.Chords, log=print):
+    """(renamed segments, chartId) when a Chordonomicon chart exists and its alignment agrees with the recognisers on
+    at least CHART_MIN_AGREEMENT of the beats; else None."""
+    from . import charts as C
+
+    try:
+        cands = C.lookup(sp, track_id)
+    except Exception as e:  # noqa: BLE001  a chart is optional
+        log(f"  chart lookup failed: {e}")
+        return None
+    if not cands:
+        return None
+    res = C.align_best(cands, audio, sr, beats.beats, ch.segs)
+    if res is None:
+        return None
+    al = res.alignment
+    if al.agreement < CHART_MIN_AGREEMENT:
+        log(f"  chart {res.chart.row_id} rejected: agrees on {al.agreement:.0%} of beats (shift {al.shift})")
+        return None
+    vocab = C.chart_vocabulary(C.parse(res.chart.chords), al.shift)
+    log(f"  chart {res.chart.row_id}: agrees on {al.agreement:.0%} of beats, names {len(vocab)} chords")
+    return C.rename_with_vocabulary(ch.segs, vocab), f"chordonomicon:{res.chart.row_id}"
 
 
 def analyse_track(
@@ -63,7 +101,7 @@ def analyse_track(
                 raise
     try:
         audio = cap.track_audio(mono=True)
-        tl = analyse_audio(track_id, cap.duration_ms, audio, cap.rate, recogniser, log=log)
+        tl = analyse_audio(track_id, cap.duration_ms, audio, cap.rate, recogniser, log=log, sp=sp)
     finally:
         cap.delete()
     tl["title"] = meta["name"]  # not in the schema; stripped below, kept in the local copy

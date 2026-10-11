@@ -33,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--skip-existing", action="store_true", help="skip tracks already in the store")
     s.add_argument("--first", type=int, default=0, help="for a playlist: only its first N tracks")
 
+    sub.add_parser("chart-index", help="build the local Chordonomicon chart index (one time, ~200 MB)")
     s = sub.add_parser("analyse-saved", help="analyse captured truth audio (no replay) and upload")
     s.add_argument("names", nargs="*")
     s = sub.add_parser("tap", help="ground truth: play a track and tap its beats/bars")
@@ -194,10 +195,17 @@ def cmd_analyse(a) -> int:
     return 1 if failed else 0
 
 
+def cmd_chart_index(a) -> None:
+    from .charts import build_index
+
+    build_index()
+
+
 def cmd_analyse_saved(a) -> None:
     import soundfile as sf
 
     from .pipeline import analyse_audio
+    from .spotify import Spotify
     from .store import Store
     from .truth import TRUTH_AUDIO, load, truth_path
 
@@ -210,7 +218,7 @@ def cmd_analyse_saved(a) -> None:
             continue
         audio, sr = sf.read(TRUTH_AUDIO / f"{name}.flac", dtype="float32")
         print(f"{rec['title']} — {rec['artist']}")
-        tl = analyse_audio(rec["trackId"], rec["durationMs"], audio, sr)
+        tl = analyse_audio(rec["trackId"], rec["durationMs"], audio, sr, sp=Spotify())
         res = store.put(tl)
         print(f"  uploaded {res['id']} ({res['bytes']} bytes)")
 

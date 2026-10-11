@@ -115,15 +115,19 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
 - **D-39** (M3, refines D-37) The evaluation yardstick is human, time-aligned annotation: ChoCo's Isophonics and McGill Billboard
   partitions (CC BY 4.0), imported with `mqc import-annotated` and shifted onto the Spotify release by the root-agreement peak
   (±4 s). iReal-chart truths are secondary: on Let It Be the iReal truth agrees with Isophonics at root 0.93, sevenths 0.85.
+- **D-40** (M3 follow-up, resolves P-07) Chart names. Chordonomicon (Kantarelis et al. 2024, CC BY-NC 4.0; 440k charts with
+  Spotify ids) is indexed on the PC (`pnpm companion chart-index`); a track's chart is found by its id, else by the ids of other
+  releases (Spotify search). The chart is placed by Jump Alignment (McVicar et al. 2011) in all 12 keys, but only its chord
+  *names* are used: each recognised root + third takes the chart's usual name for it (Fmaj7, Am7, G7sus4), and only when the
+  aligned chart agrees with the recognisers' roots on ≥ 80% of beats. Timing and roots stay the recognisers'. Timeline
+  `chartId` = `chordonomicon:<row>`. Human pop, MIREX 7ths per beat: Let It Be .856→.860, Just the Way You Are .708→.708,
+  It's Too Late .874→.912; Something's capo chart (74%) and Fly Me's (71%) rejected. Placing the chart's chords themselves
+  scored below recognition (Let It Be .749, Just the Way You Are .638), so that is not used.
 
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
   on standards and none on Let It Be (verse and chorus share chords), so analysed timelines carry no section labels. Decide by
   M5 (lead-sheet rehearsal letters) or M8 (Song map): chord-repetition analysis, a structure model, or chart alignment.
-- **P-07** (M3) Chart-informed recognition. Chordonomicon (CC BY-NC 4.0, ~680k Ultimate Guitar charts keyed by Spotify track id,
-  a 2024 snapshot) has charts for 4 of 7 annotated classics and 3 of 10 playlist tracks; where present they match human
-  annotations at chord-change level 0.84–0.92 (ours: 0.47–0.68 against UG). Proposal: Jump Alignment (McVicar et al. 2011, used
-  in DECIBEL) of the chart onto our beat-level evidence, falling back to recognition where no chart exists. Decide when to build.
 - **P-06** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
   Mas Que Nada's F minor (B♭m7–E♭7 bars). Main key right on 3 of 4 truth tracks. Revisit the emission weights with the truth set.
