@@ -1,0 +1,27 @@
+{
+ "name": "carole-king--its-too-late",
+ "trackId": "12q3V8ShACq2PSWINMc2rC",
+ "title": "It's Too Late",
+ "artist": "Carole King",
+ "durationMs": 233552,
+ "capture": {
+  "offsetMs": 446.2,
+  "offsetMadMs": 7.4,
+  "firstSoundMs": 580.2267573696145,
+  "peak": 0.864
+ },
+ "chart": {
+  "playlist": "jazz1460",
+  "title": "It's Too Late"
+ },
+ "form": [],
+ "taps": [],
+ "annotation": {
+  "jams": "isophonics_289.jams",
+  "corpus": "isophonics",
+  "key": "A:minor",
+  "shiftMs": -100,
+  "rootAgreement": 0.898,
+  "runnerUp": 0.781
+ }
+}

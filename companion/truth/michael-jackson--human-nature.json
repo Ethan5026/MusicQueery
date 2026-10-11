@@ -1,0 +1,27 @@
+{
+ "name": "michael-jackson--human-nature",
+ "trackId": "4cgjA7B4fJBHyB9Ya2bu0t",
+ "title": "Human Nature",
+ "artist": "Michael Jackson",
+ "durationMs": 245837,
+ "capture": {
+  "offsetMs": 402.5,
+  "offsetMadMs": 4.6,
+  "firstSoundMs": 812.562358276644,
+  "peak": 0.666
+ },
+ "chart": {
+  "playlist": "jazz1460",
+  "title": "Human Nature"
+ },
+ "form": [],
+ "taps": [],
+ "annotation": {
+  "jams": "billboard_121.jams",
+  "corpus": "McGill Billboard",
+  "key": "D",
+  "shiftMs": 300,
+  "rootAgreement": 0.747,
+  "runnerUp": 0.616
+ }
+}

@@ -14,7 +14,7 @@ from .config import COMPANION, WORK_DIR
 from .spotify import Spotify
 from .store import Store
 
-DEFAULT_RECOGNISER = "auto"  # SP4: vote of BTC/Chordino/madmom, sevenths gated on jazz (handoffs/M3-analysis.md)
+DEFAULT_RECOGNISER = "auto"  # vote of BTC/Chordino/madmom as heard (D-38; handoffs/M3-analysis.md)
 OUT_DIR = COMPANION / "out"
 
 

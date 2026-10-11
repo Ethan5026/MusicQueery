@@ -1,0 +1,27 @@
+{
+ "name": "billy-joel--just-the-way-you-are",
+ "trackId": "49MHCPzvMLXhRjDantBMVH",
+ "title": "Just the Way You Are",
+ "artist": "Billy Joel",
+ "durationMs": 290573,
+ "capture": {
+  "offsetMs": 456.1,
+  "offsetMadMs": 5.7,
+  "firstSoundMs": 699.546485260771,
+  "peak": 0.585
+ },
+ "chart": {
+  "playlist": "jazz1460",
+  "title": "Just the Way You Are"
+ },
+ "form": [],
+ "taps": [],
+ "annotation": {
+  "jams": "billboard_306.jams",
+  "corpus": "McGill Billboard",
+  "key": "D",
+  "shiftMs": -340,
+  "rootAgreement": 0.819,
+  "runnerUp": 0.665
+ }
+}

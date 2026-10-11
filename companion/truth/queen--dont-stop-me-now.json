@@ -1,0 +1,27 @@
+{
+ "name": "queen--dont-stop-me-now",
+ "trackId": "1mJCR9mgf0tOg69IohkFFf",
+ "title": "Don't Stop Me Now",
+ "artist": "Queen",
+ "durationMs": 210325,
+ "capture": {
+  "offsetMs": 429.3,
+  "offsetMadMs": 6.8,
+  "firstSoundMs": 572.81179138322,
+  "peak": 0.697
+ },
+ "chart": {
+  "playlist": "jazz1460",
+  "title": "Don't Stop Me Now"
+ },
+ "form": [],
+ "taps": [],
+ "annotation": {
+  "jams": "isophonics_240.jams",
+  "corpus": "isophonics",
+  "key": "F",
+  "shiftMs": -140,
+  "rootAgreement": 0.883,
+  "runnerUp": 0.69
+ }
+}

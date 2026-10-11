@@ -301,14 +301,15 @@ class Chords:
 
 
 def recognise(audio: np.ndarray, sr: int, beats: Beats, recogniser: str = "auto") -> Chords:
-    """`auto`: 3-way vote, lead-sheet sevenths when BTC hears enough 7ths. Any single recogniser name: that one,
-    no sevenths."""
+    """`auto` (default): 3-way vote as heard, no added sevenths (D-38). `auto+7ths`: the vote with lead-sheet sevenths
+    when BTC hears enough 7ths (the M3 gate, D-34; hurt human-annotated pop, kept for jazz experiments).
+    Any single recogniser name: that one alone."""
     end = len(audio) / sr
-    if recogniser != "auto":
+    if recogniser not in ("auto", "auto+7ths"):
         return Chords(beat_sync(RECOGNISERS[recogniser](audio, sr), beats.beats, end), False, 0.0, recogniser)
     per = {r: RECOGNISERS[r](audio, sr) for r in VOTE_WEIGHTS}
     share = seventh_share(per["btc"])
-    jazz = share >= JAZZ_SEVENTH_SHARE
+    jazz = recogniser == "auto+7ths" and share >= JAZZ_SEVENTH_SHARE
     return Chords(vote(per, beats.beats, end), jazz, share, "vote+7ths" if jazz else "vote")
 
 
@@ -440,7 +441,7 @@ def summary(tl: dict) -> str:
 
 # ---------------------------------------------------------------- sections (experimental, not in the pipeline)
 # M3 tried harmony-only segmentation: about half the boundaries right on standards, nothing on Let It Be (verse
-# and chorus share chords). Timelines ship without section labels until this is solved (P-01, handoffs/M3).
+# and chorus share chords). Timelines ship without section labels until this is solved (P-05, handoffs/M3).
 
 
 def bar_features(audio: np.ndarray, sr: int, downbeats: np.ndarray, segs: Segments) -> np.ndarray:

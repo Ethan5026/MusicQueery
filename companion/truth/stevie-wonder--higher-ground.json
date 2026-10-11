@@ -1,0 +1,27 @@
+{
+ "name": "stevie-wonder--higher-ground",
+ "trackId": "2jKgDOSQgkh4sYtZgsjMxH",
+ "title": "Higher Ground",
+ "artist": "Stevie Wonder",
+ "durationMs": 226560,
+ "capture": {
+  "offsetMs": 517.2,
+  "offsetMadMs": 7.9,
+  "firstSoundMs": 572.3809523809524,
+  "peak": 0.739
+ },
+ "chart": {
+  "playlist": "jazz1460",
+  "title": "Higher Ground"
+ },
+ "form": [],
+ "taps": [],
+ "annotation": {
+  "jams": "billboard_261.jams",
+  "corpus": "McGill Billboard",
+  "key": "Eb",
+  "shiftMs": -1080,
+  "rootAgreement": 0.734,
+  "runnerUp": 0.692
+ }
+}

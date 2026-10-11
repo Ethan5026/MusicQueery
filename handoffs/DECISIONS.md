@@ -100,18 +100,30 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   MIREX sevenths per beat: Let It Be 0.85, Imagine 0.70, Mas Que Nada 0.64, Fly Me to the Moon 0.54; beat F 0.977–0.998.
 - **D-35** (M3) Spotify development mode can quota-block playlist reads (`/me/playlists`, `/playlists/*`) for ~24 h
   (`429 QUOTA_EXCEEDED`, Retry-After ≈ 86 000 s) while player and track endpoints keep working. Spotify calls cap Retry-After at
-  30 s and fail instead of stalling; a playlist's tracks can be found by playing it at each position.
+  30 s and fail instead of stalling; a playlist's tracks can be found by playing it at each position. Also seen: batch
+  `GET /tracks?ids=` returns 403, and `/search` rejects `limit` > 10.
 - **D-36** (M3, user) Popular songs come first: recognising chords and progressions in pop songs that are in no standards list
   is the main job; iReal charts and chart alignment are a bonus for standards. Evaluation weights pop at least equally and
   jazz-only priors must be gated. New test songs come from the user's Spotify playlist "Swinging and Shredding", only when needed.
 - **D-37** (M3) Ground truth without taps: chart chords (iReal, transposed if needed) laid on madmom's 4/4 downbeat grid (independent
   of beat_this; agreement with regularised beat_this F = 0.976–0.998); the form is read from the recognisers and accepted only when
   root accuracy peaks at zero beat shift. `mqc tap` (ENTER on bar lines, SPACE on beats) exists for hand-tapped truth.
+- **D-38** (M3, supersedes the sevenths gate in D-34) On 7 human-annotated pop songs (D-39) the lead-sheet-sevenths step
+  cut MIREX sevenths from 0.677 to 0.390 (the gate chose it on 6 of 7 → 0.506); it only "helped" against iReal-chart truth,
+  which writes 7ths everywhere. Default `auto` = the 3-way vote as heard; `auto+7ths` stays as an opt-in for jazz experiments.
+  Human-annotated pop, per beat: vote 0.677 (time-weighted 0.651), majmin 0.840, root 0.838; BTC alone 0.680; beat F 0.978.
+- **D-39** (M3, refines D-37) The evaluation yardstick is human, time-aligned annotation: ChoCo's Isophonics and McGill Billboard
+  partitions (CC BY 4.0), imported with `mqc import-annotated` and shifted onto the Spotify release by the root-agreement peak
+  (±4 s). iReal-chart truths are secondary: on Let It Be the iReal truth agrees with Isophonics at root 0.93, sevenths 0.85.
 
 ## Pending
 
-- **P-01** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
+- **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
   on standards and none on Let It Be (verse and chorus share chords), so analysed timelines carry no section labels. Decide by
   M5 (lead-sheet rehearsal letters) or M8 (Song map): chord-repetition analysis, a structure model, or chart alignment.
-- **P-02** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
+- **P-07** (M3) Chart-informed recognition. Chordonomicon (CC BY-NC 4.0, ~680k Ultimate Guitar charts keyed by Spotify track id,
+  a 2024 snapshot) has charts for 4 of 7 annotated classics and 3 of 10 playlist tracks; where present they match human
+  annotations at chord-change level 0.84–0.92 (ours: 0.47–0.68 against UG). Proposal: Jump Alignment (McVicar et al. 2011, used
+  in DECIBEL) of the chart onto our beat-level evidence, falling back to recognition where no chart exists. Decide when to build.
+- **P-06** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
   Mas Que Nada's F minor (B♭m7–E♭7 bars). Main key right on 3 of 4 truth tracks. Revisit the emission weights with the truth set.

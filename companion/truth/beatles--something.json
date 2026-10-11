@@ -1,0 +1,27 @@
+{
+ "name": "beatles--something",
+ "trackId": "5lwhEPfBUN3ECthg5EeCg2",
+ "title": "Something - 2019 Mix",
+ "artist": "The Beatles",
+ "durationMs": 183693,
+ "capture": {
+  "offsetMs": 657.0,
+  "offsetMadMs": 6.7,
+  "firstSoundMs": 769.8639455782313,
+  "peak": 0.55
+ },
+ "chart": {
+  "playlist": "jazz1460",
+  "title": "Something - 2019 Mix"
+ },
+ "form": [],
+ "taps": [],
+ "annotation": {
+  "jams": "isophonics_13.jams",
+  "corpus": "isophonics",
+  "key": "C",
+  "shiftMs": -140,
+  "rootAgreement": 0.808,
+  "runnerUp": 0.667
+ }
+}

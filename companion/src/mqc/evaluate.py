@@ -21,7 +21,10 @@ def labels_at(tl: dict, times_ms: np.ndarray) -> list[str]:
     """Harte label sounding at each time ('X' where the timeline has no chord)."""
     chords = tl["chords"]
     starts = np.array([c["startMs"] for c in chords]) if chords else np.zeros(0)
-    harte = bridge.harte([c["symbol"] for c in chords]) if chords else []
+    if chords and all("harte" in c for c in chords):  # human annotations keep their own Harte labels
+        harte = [c["harte"] for c in chords]
+    else:
+        harte = bridge.harte([c["symbol"] for c in chords]) if chords else []
     out = []
     for t in times_ms:
         i = int(np.searchsorted(starts, t, side="right")) - 1
@@ -33,15 +36,26 @@ def labels_at(tl: dict, times_ms: np.ndarray) -> list[str]:
 
 
 def _jazz(label: str) -> str:
+    """Root:quality with 6→maj7 etc.; plain `C` (Harte shorthand for C:maj) and bass `/3` are normalised."""
     if label in ("N", "X"):
         return label
-    root, q = label.split(":")
+    root, _, q = label.partition(":")
+    root = root.split("/")[0]
+    q = (q or "maj").split("/")[0].split("(")[0] or "maj"
     return f"{root}:{JAZZ_MAP.get(q, q)}"
 
 
 def chord_scores(truth: dict, est: dict) -> dict:
     beats = np.array(truth["beats"])
-    mids = (beats[:-1] + beats[1:]) / 2
+    out = _scores(truth, est, (beats[:-1] + beats[1:]) / 2)
+    # MIREX-style time weighting: every 50 ms of the charted span
+    t = np.arange(truth["chords"][0]["startMs"], truth["chords"][-1]["endMs"], 50.0) if truth["chords"] else beats
+    timed = _scores(truth, est, t)
+    out.update({f"{k}_time": v for k, v in timed.items() if k in ("root", "majmin", "sevenths")})
+    return out
+
+
+def _scores(truth: dict, est: dict, mids: np.ndarray) -> dict:
     ref = labels_at(truth, mids)
     hyp = labels_at(est, mids)
     keep = [i for i, r in enumerate(ref) if r != "X"]

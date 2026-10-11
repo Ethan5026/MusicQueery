@@ -41,6 +41,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--no-keys", action="store_true", help="capture the audio only (taps can be added later)")
     s = sub.add_parser("truth", help="build the truth timeline from taps + form")
     s.add_argument("name")
+    s = sub.add_parser("import-annotated", help="truth from a human-annotated JAMS file (ChoCo): find, capture, align")
+    s.add_argument("jams")
+    s.add_argument("--name", required=True)
+    s.add_argument("--track", help="Spotify track to use instead of searching")
     s = sub.add_parser("bakeoff", help="SP4: score every recogniser on the truth tracks")
     s.add_argument("names", nargs="*")
     s.add_argument("--recognisers", default="chordino,btc,madmom")
@@ -307,6 +311,55 @@ def cmd_bakeoff(a) -> None:
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf8")
     print(f"→ {out}")
+
+
+def cmd_import_annotated(a) -> None:
+    from . import analysis as A
+    from . import annotated as N
+    from . import truth as T
+    from .spotify import Spotify, parse_track_id
+
+    ann = N.load_jams(Path(a.jams))
+    sp = Spotify()
+    artist = a.name.split("--")[0].replace("-", " ") if not ann["artist"] else ann["artist"]
+    if a.track:
+        hit = sp.track(parse_track_id(a.track))
+    else:
+        hit = N.find_on_spotify(sp, ann["title"], artist, ann["duration"])
+    if not hit:
+        raise SystemExit(f"no Spotify release of {ann['title']} within 8 s of {ann['duration']:.0f} s; pass --track")
+    print(
+        f"{ann['title']} ({ann['corpus']}, {ann['duration']:.1f} s) → {hit['name']} — {hit['artists'][0]['name']} "
+        f"({hit['duration_ms'] / 1000:.1f} s) [{hit['id']}]"
+    )
+    if not T.audio_path(a.name).exists():
+        T.tap(sp, hit["id"], a.name, keys=False)
+    rec = T.load(a.name)
+    audio, sr = _truth_audio(a.name)
+    beats = A.track_beats(audio, sr)
+    est = A.vote({r: A.RECOGNISERS[r](audio, sr) for r in A.VOTE_WEIGHTS}, beats.beats, len(audio) / sr)
+    shift, agree, runner = N.best_offset(ann["segs"], est)
+    grid, _ = T.grid_from_madmom(audio, sr, 4)
+    tl = N.truth_timeline(rec, ann, shift, grid)
+    (T.TRUTH_DIR / f"{a.name}.timeline.json").write_text(json.dumps(tl, ensure_ascii=False), encoding="utf8")
+    rec.update(
+        {
+            "form": [],
+            "annotation": {
+                "jams": Path(a.jams).name,
+                "corpus": ann["corpus"],
+                "key": ann["key"],
+                "shiftMs": round(shift * 1000),
+                "rootAgreement": round(agree, 3),
+                "runnerUp": round(runner, 3),
+            },
+        }
+    )
+    T.save(rec)
+    print(
+        f"  shift {shift * 1000:+.0f} ms (root agreement {agree:.2f}, best elsewhere {runner:.2f}); "
+        f"{len(tl['chords'])} chords → truth/{a.name}.timeline.json"
+    )
 
 
 def cmd_get(a) -> None:
