@@ -46,7 +46,9 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
-        globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        // The band's samples (~1.7 MB) are precached too, so backing tracks play offline (M6).
+        globPatterns: ['**/*.{js,css,html,png,svg,woff2,mp3}'],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // Eruda (the on-device console, ?debug) loads only on demand; keep it out of the offline cache.
         globIgnores: ['**/eruda-*.js'],
         cleanupOutdatedCaches: true,

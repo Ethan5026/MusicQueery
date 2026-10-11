@@ -1,12 +1,18 @@
 // App-wide singletons. Screens read a clock through the active transport; only the clock talks to Spotify (D-16).
 //
-// Two drivers (M5): 'spotify' follows whatever Spotify plays on any device (SpotifyClock), and 'manual' runs a
-// recorded timeline on the app's own clock (ManualClock, M4). Spotify takes over when it locks onto a track, changes
-// track, or starts playing; opening a recorded track in Tracks hands back to the manual clock. When Spotify has
-// nothing active the chart stays where it was, on the manual clock, paused.
+// Three drivers: 'spotify' follows whatever Spotify plays on any device (SpotifyClock, M5), 'manual' runs a recorded
+// timeline on the app's own clock (ManualClock, M4), and 'audio' is the backing band on the Web Audio clock (M6).
+// Spotify takes over when it locks onto a track, changes track, or starts playing (while the band plays, only when
+// Spotify starts playing, and the band then pauses); opening a recorded track in Tracks hands back to the manual
+// clock. When Spotify has nothing active the chart stays where it was, on the manual clock, paused.
 
+import type { Part } from '@mq/band'
 import type { Timeline } from '@mq/model'
 import { create } from 'zustand'
+import { unlock } from './audio/context'
+import { type Loop, band } from './audio/engine'
+import { loadKit } from './audio/kit'
+import { type BandSpec, chartFor, specLine } from './audio/library'
 import { ManualClock } from './clock/ManualClock'
 import { SpotifyClock } from './clock/SpotifyClock'
 import { offsetFor, startBiasStore } from './clock/offsets'
@@ -55,7 +61,7 @@ export function runClock(): void {
 
 // ---------------------------------------------------------------- transport
 
-export type Driver = 'spotify' | 'manual'
+export type Driver = 'spotify' | 'manual' | 'audio'
 
 /** What a screen needs to show and steer the playhead, whichever clock drives it. */
 export interface Transport {
@@ -75,7 +81,20 @@ const manualTransport: Transport = {
   durationMs: () => manual.durationMs,
   toggle: () => manual.toggle(),
   seek: (ms) => manual.seek(ms),
-  tick: () => void manual.checkEnd(),
+  tick: () => {
+    const loop = useLoop.getState().loop
+    if (loop && manual.playing && manual.positionMs() >= loop.endMs) manual.seek(loop.startMs)
+    else manual.checkEnd()
+  },
+}
+
+const audioTransport: Transport = {
+  driver: 'audio',
+  clock: band,
+  durationMs: () => band.durationMs,
+  toggle: () => (band.playing ? band.pause() : void playBand()),
+  seek: (ms) => band.seek(ms),
+  tick: () => void band.checkEnd(),
 }
 
 /** Send a player command, then poll at once so the clock picks up the change. */
@@ -83,17 +102,48 @@ function command(p: Promise<void>): void {
   p.catch((err: unknown) => log('warn', 'spotify.command_failed', { err: String(err) })).finally(() => clock.pollNow())
 }
 
+// The chart shows Spotify's position + start bias + device offset; aim a seek so it lands on `ms`.
+const spotifySeek = (ms: number) => command(player.seek(ms - clock.offsetMs - startBiasStore.get(clock.last?.deviceId ?? null)))
+
+/** Spotify takes a few hundred ms to act on a seek, so the loop jumps back this early (learned from each jump). */
+let loopLeadMs = 150
+let loopJump: { sentAt: number; fromMs: number; to: number } | null = null
+
 const spotifyTransport: Transport = {
   driver: 'spotify',
   clock,
   durationMs: () => clock.last?.durationMs ?? useSession.getState().timeline?.durationMs ?? 0,
   toggle: () => command(clock.playing ? player.pause() : player.play()),
-  // The chart shows Spotify's position + start bias + device offset; aim the seek so it lands on `ms`.
-  seek: (ms) => command(player.seek(ms - clock.offsetMs - startBiasStore.get(clock.last?.deviceId ?? null))),
-  tick: () => {},
+  seek: spotifySeek,
+  tick: () => {
+    const loop = useLoop.getState().loop
+    if (!loop || !clock.playing) return
+    const now = performance.now()
+    if (loopJump && now - loopJump.sentAt < 2500) return
+    const pos = clock.positionMs()
+    if (pos >= loop.endMs - loopLeadMs && pos < loop.endMs + 4000) {
+      loopJump = { sentAt: now, fromMs: pos, to: loop.startMs }
+      spotifySeek(loop.startMs)
+    }
+  },
 }
 
-export const transportFor = (d: Driver): Transport => (d === 'spotify' ? spotifyTransport : manualTransport)
+// How long a loop seek took to land; the next jump is sent that much before the loop's end.
+clock.onJump((e) => {
+  if (!loopJump || (e.kind !== 'seek' && e.kind !== 'resync') || Math.abs(e.toMs - loopJump.to) > 1500) return
+  const took = e.at - loopJump.sentAt
+  const loop = useLoop.getState().loop
+  log('info', 'loop.jump', {
+    tookMs: Math.round(took),
+    sentBeforeEndMs: loop ? Math.round(loop.endMs - loopJump.fromMs) : null,
+    leadMs: loopLeadMs,
+  })
+  loopLeadMs = Math.min(800, Math.max(80, Math.round(loopLeadMs * 0.5 + took * 0.5)))
+  loopJump = null
+})
+
+export const transportFor = (d: Driver): Transport =>
+  d === 'spotify' ? spotifyTransport : d === 'audio' ? audioTransport : manualTransport
 export const activeTransport = (): Transport => transportFor(useSession.getState().driver)
 
 // ---------------------------------------------------------------- session
@@ -109,6 +159,8 @@ interface SessionState {
   meta: TrackMeta | null
   status: 'idle' | 'loading' | 'ok' | 'missing' | 'error'
   error: string
+  /** the backing track behind the 'audio' driver */
+  band: BandSpec | null
   setTab: (tab: Tab) => void
   /** Opens a recorded timeline under the ManualClock. Resolves to the load result. */
   open: (id: string, startMs?: number) => Promise<LoadResult>
@@ -130,6 +182,7 @@ export const useSession = create<SessionState>((set, get) => ({
   meta: null,
   status: 'idle',
   error: '',
+  band: null,
   setTab: (tab) => {
     history.replaceState(null, '', `#${tab}`)
     set({ tab })
@@ -145,6 +198,7 @@ export const useSession = create<SessionState>((set, get) => ({
       set({ status: keep.timeline ? 'ok' : r.status, error: r.status === 'missing' ? 'missing' : r.message })
       return r
     }
+    band.pause()
     manual.load(id, r.timeline.durationMs, startMs)
     set({ driver: 'manual', id, timeline: r.timeline, meta, status: 'ok', error: '' })
     log('info', 'session.open', { id, from: r.from, chords: r.timeline.chords.length, startMs: Math.round(startMs) })
@@ -165,6 +219,7 @@ function metaFromPlayer(id: string): TrackMeta | null {
 async function follow(trackId: string): Promise<void> {
   const id = `spotify:track:${trackId}`
   manual.pause()
+  band.pause()
   const s = useSession.getState()
   const meta = metaFromPlayer(id)
   if (meta) void idbSet('tracks', id, meta)
@@ -209,7 +264,9 @@ export function retryFollow(): void {
 
 clock.onJump((e) => {
   const s = useSession.getState()
-  if (e.trackId && (e.kind === 'lock' || e.kind === 'track' || (e.kind === 'play' && s.driver !== 'spotify'))) {
+  // while the band plays, only Spotify starting to play takes over
+  const bandBusy = s.driver === 'audio' && band.playing && e.kind !== 'play'
+  if (!bandBusy && e.trackId && (e.kind === 'lock' || e.kind === 'track' || (e.kind === 'play' && s.driver !== 'spotify'))) {
     void follow(e.trackId)
   } else if (e.kind === 'idle' && s.driver === 'spotify') {
     // Nothing active on Spotify: hold the chart where it was, on the manual clock.
@@ -228,12 +285,17 @@ clock.onJump((e) => {
 interface SavedSession {
   id: string
   positionMs: number
+  band?: BandSpec
 }
 
 function saveSession(): void {
-  const { id, driver, timeline } = useSession.getState()
+  const { id, driver, timeline, band: spec } = useSession.getState()
   if (id && timeline)
-    void idbSet('settings', 'session', { id, positionMs: transportFor(driver).clock.positionMs() } satisfies SavedSession)
+    void idbSet('settings', 'session', {
+      id,
+      positionMs: transportFor(driver).clock.positionMs(),
+      ...(driver === 'audio' && spec ? { band: spec } : {}),
+    } satisfies SavedSession)
 }
 
 /** Reopens the last timeline where it was left (paused), unless Spotify got there first. With nothing saved, a
@@ -241,6 +303,7 @@ function saveSession(): void {
 export async function restoreSession(): Promise<void> {
   const s = await idbGet<SavedSession>('settings', 'session')
   if (useSession.getState().driver === 'spotify') return
+  if (s?.band && (await openBand(s.band, s.positionMs))) return
   const r = s ? await useSession.getState().open(s.id, s.positionMs) : null
   if (r?.status === 'ok' || useSession.getState().driver === 'spotify') return
   if (!useApp.getState().authed) await useSession.getState().open(DEMO_ID)
@@ -259,6 +322,11 @@ manual.onJump((e) => {
   updateWake()
   if (e.kind !== 'play') saveSession()
 })
+band.onJump((e) => {
+  if (useSession.getState().driver !== 'audio') return
+  updateWake()
+  if (e.kind !== 'play') saveSession()
+})
 useSession.subscribe((s, prev) => {
   if (s.driver !== prev.driver) updateWake()
 })
@@ -269,3 +337,140 @@ document.addEventListener('visibilitychange', () => {
     wakeOn = false
   } else updateWake()
 })
+
+// ---------------------------------------------------------------- loop
+
+/** An A–B loop on bar lines for whichever clock drives (M6): exact on the band, a seek on Spotify. */
+interface LoopState {
+  loop: Loop | null
+  /** start set, waiting for the end */
+  pendingStart: number | null
+  set: (loop: Loop | null) => void
+  setPending: (ms: number | null) => void
+}
+
+export const useLoop = create<LoopState>((set) => ({
+  loop: null,
+  pendingStart: null,
+  set: (loop) => {
+    set({ loop, pendingStart: null })
+    band.setLoop(useSession.getState().driver === 'audio' ? loop : null)
+    loopJump = null
+    log('info', 'loop.set', loop ? { startMs: Math.round(loop.startMs), endMs: Math.round(loop.endMs) } : { off: true })
+  },
+  setPending: (pendingStart) => set({ pendingStart }),
+}))
+
+// A loop belongs to one track on one clock.
+useSession.subscribe((s, prev) => {
+  const l = useLoop.getState()
+  if ((s.id !== prev.id || s.driver !== prev.driver) && (l.loop || l.pendingStart !== null)) l.set(null)
+})
+
+// ---------------------------------------------------------------- band
+
+export interface BandPrefs {
+  mutes: Record<Part, boolean>
+  /** count-in bars (0–2) before each start */
+  countIn: number
+}
+
+interface BandUi extends BandPrefs {
+  /** kit download progress 0..1 while loading, null otherwise */
+  loading: number | null
+  error: string
+  setMute: (p: Part, muted: boolean) => void
+  setCountIn: (n: number) => void
+}
+
+const saveBandPrefs = (p: BandPrefs) => void idbSet('settings', 'band', { mutes: p.mutes, countIn: p.countIn } satisfies BandPrefs)
+
+export const useBand = create<BandUi>((set, get) => ({
+  mutes: { piano: false, bass: false, drums: false },
+  countIn: 1,
+  loading: null,
+  error: '',
+  setMute: (p, muted) => {
+    set({ mutes: { ...get().mutes, [p]: muted } })
+    band.setMute(p, muted)
+    saveBandPrefs(get())
+  },
+  setCountIn: (countIn) => {
+    set({ countIn })
+    band.opts.countIn = countIn
+    saveBandPrefs(get())
+  },
+}))
+
+export async function loadBandPrefs(): Promise<void> {
+  const p = await idbGet<BandPrefs>('settings', 'band')
+  if (!p) return
+  useBand.setState({ mutes: { ...useBand.getState().mutes, ...p.mutes }, countIn: p.countIn ?? 1 })
+}
+
+/** Unlocks audio (must start inside a tap) and loads the kit once. Resolves false if either failed. */
+export async function ensureBand(): Promise<boolean> {
+  try {
+    if (typeof AudioContext === 'undefined') throw new Error('this browser has no Web Audio')
+    const ctx = await unlock()
+    if (band.ready) return true
+    useBand.setState({ loading: 0, error: '' })
+    const kit = await loadKit(ctx, (f) => useBand.setState({ loading: f }))
+    band.attach(ctx, kit)
+    for (const [p, m] of Object.entries(useBand.getState().mutes)) band.setMute(p as Part, m)
+    useBand.setState({ loading: null })
+    return true
+  } catch (err) {
+    useBand.setState({ loading: null, error: `Couldn’t start the band: ${String(err)}` })
+    return false
+  }
+}
+
+/** Starts the band (from a tap), pausing Spotify if it plays somewhere so the two don't play over each other. */
+export async function playBand(): Promise<boolean> {
+  const ok = await ensureBand()
+  if (!ok || useSession.getState().driver !== 'audio') return false
+  if (clock.playing) command(player.pause())
+  band.opts.countIn = useBand.getState().countIn
+  band.play()
+  return true
+}
+
+/** Opens a backing track on the band's clock, paused at `startMs`. False if its chart is gone. */
+export async function openBand(spec: BandSpec, startMs = 0): Promise<boolean> {
+  const mine = ++seq
+  const chart = await chartFor(spec)
+  if (mine !== seq) return false
+  if (!chart) {
+    log('warn', 'band.missing', { ref: spec.ref })
+    return false
+  }
+  manual.pause()
+  const { countIn } = useBand.getState()
+  const timeline = band.load(chart, { bpm: spec.bpm, style: spec.style, choruses: spec.choruses, countIn })
+  if (startMs > 0) band.seek(startMs)
+  useSession.setState({
+    driver: 'audio',
+    id: timeline.id,
+    timeline,
+    meta: { id: timeline.id, title: chart.title, artist: specLine(spec), ...(chart.style ? { style: chart.style } : {}) },
+    status: 'ok',
+    error: '',
+    band: spec,
+  })
+  log('info', 'band.open', { ...spec })
+  saveSession()
+  return true
+}
+
+/** Changes the open backing track's key, tempo, style or choruses, keeping the place (live while playing). */
+export async function updateBand(patch: Partial<BandSpec>): Promise<void> {
+  const s = useSession.getState()
+  if (s.driver !== 'audio' || !s.band) return
+  const spec = { ...s.band, ...patch }
+  const chart = patch.key !== undefined && patch.key !== s.band.key ? await chartFor(spec) : null
+  const timeline = band.update({ ...(chart ? { chart } : {}), bpm: spec.bpm, style: spec.style, choruses: spec.choruses })
+  if (!timeline) return
+  useSession.setState({ band: spec, id: timeline.id, timeline, meta: s.meta ? { ...s.meta, artist: specLine(spec) } : s.meta })
+  saveSession()
+}

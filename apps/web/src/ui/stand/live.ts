@@ -6,7 +6,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { create } from 'zustand'
 import { type SyncState, sameSync, syncState } from '../../clock/sync'
 import { perf } from '../../perf'
-import { clock, manual, transportFor, useApp, useSession } from '../../services'
+import { band } from '../../audio/engine'
+import { type Driver, clock, manual, transportFor, useApp, useSession } from '../../services'
 import type { Settings } from '../../store/settings'
 
 /** Per-frame listeners: position and duration in ms. Registered by refs, so React stays out of it (D-44). */
@@ -60,8 +61,9 @@ export function useMoment(tl: Timeline | null, s: Settings): Moment | null {
   return tl ? m : null
 }
 
-function currentSync(driver: 'spotify' | 'manual', authed: boolean): SyncState {
+function currentSync(driver: Driver, authed: boolean): SyncState {
   if (driver === 'manual') return { kind: 'manual', playing: manual.playing }
+  if (driver === 'audio') return { kind: 'band', playing: band.playing, countIn: band.countInLeft() }
   return syncState({
     authed,
     now: performance.now(),
@@ -73,7 +75,7 @@ function currentSync(driver: 'spotify' | 'manual', authed: boolean): SyncState {
   })
 }
 
-/** The sync badge state, checked four times a second; re-renders only when it changes. */
+/** The sync badge state, checked four times a second (ten for the band's count-in); re-renders only on a change. */
 export function useSync(): SyncState {
   const driver = useSession((x) => x.driver)
   const authed = useApp((x) => x.authed)
@@ -84,13 +86,15 @@ export function useSync(): SyncState {
       setSt((p) => (sameSync(p, n) ? p : n))
     }
     check()
-    const id = setInterval(check, 250)
+    const id = setInterval(check, driver === 'audio' ? 100 : 250)
     const off1 = clock.onJump(check)
     const off2 = manual.onJump(check)
+    const off3 = band.onJump(check)
     return () => {
       clearInterval(id)
       off1()
       off2()
+      off3()
     }
   }, [driver, authed])
   return st

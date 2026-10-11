@@ -10,6 +10,7 @@ import { Seg } from '../atoms'
 import { Calibrate } from '../stand/Calibrate'
 import { useStandUi, useSync } from '../stand/live'
 import { useSubscription } from '../hooks'
+import { AudioTestCard } from './AudioTest'
 import { AuthCard, DebugCard, NowCard, ProbeCard, WakeCard } from './Diagnostics'
 
 export function SettingsTab() {
@@ -120,6 +121,10 @@ export function SettingsTab() {
           <p className="dim">
             Build {BUILD} · {isStandalone() ? 'Home Screen app' : 'browser tab'}
           </p>
+          <p className="dim">
+            Band samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0), double bass by D. Smolken (CC0), drums
+            from the Versilian Community Sample Library (CC0).
+          </p>
           <PerfLine />
           <button onClick={() => setDiag(!diag)}>{diag ? 'Hide' : 'Show'} sync tools and log</button>
         </section>
@@ -127,6 +132,7 @@ export function SettingsTab() {
           <>
             <NowCard />
             <ProbeCard />
+            <AudioTestCard />
             <WakeCard />
             <DebugCard />
           </>

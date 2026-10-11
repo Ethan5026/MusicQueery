@@ -76,3 +76,16 @@ export const STATE_LABEL: Record<InboxState, string> = {
   failed: 'Failed',
   new: 'Waiting',
 }
+
+/** Analysis states of up to 10 Spotify tracks (M6: On Spotify search results); empty on any failure. */
+export async function fetchStates(ids: string[]): Promise<Record<string, InboxState>> {
+  if (ids.length === 0) return {}
+  try {
+    const res = await fetch(`${API_URL}/status?ids=${ids.map(encodeURIComponent).join(',')}`, { cache: 'no-store' })
+    if (!res.ok) return {}
+    const j = (await res.json()) as { tracks: { id: string; state: InboxState }[] }
+    return Object.fromEntries(j.tracks.map((t) => [t.id, t.state]))
+  } catch {
+    return {}
+  }
+}

@@ -5,7 +5,7 @@
 import type { Timeline } from '@mq/model'
 import { type Moment, type MomentKey, analyseTimeline } from '@mq/theory'
 import { useEffect, useMemo, useRef } from 'react'
-import { activeTransport, clock, retryFollow, useApp, useSession } from '../../services'
+import { type Driver, activeTransport, clock, retryFollow, useApp, useSession } from '../../services'
 import { login } from '../../spotify/auth'
 import { type Settings, useSettings } from '../../store/settings'
 import type { TrackMeta } from '../../timeline/library'
@@ -15,6 +15,7 @@ import { Calibrate } from './Calibrate'
 import { InstrumentSeg } from './InstrumentSeg'
 import { Keyboard } from './Keyboard'
 import { LeadSheet } from './LeadSheet'
+import { LoopBand, LoopButton } from './Loop'
 import { frameBus, useLandscape, useMoment, useStandUi, useSync } from './live'
 import { type PlayView, playView } from './play'
 import { Staff } from './Staff'
@@ -82,10 +83,16 @@ export function LiveSyncBadge() {
   return <SyncBadge state={st} />
 }
 
-/** "Artist · on Living Room TV" when following Spotify, "Recorded · manual clock" otherwise. */
-function subtitle(meta: TrackMeta, driver: 'spotify' | 'manual'): string {
+/** "Artist · on Living Room TV" following Spotify, "Swing · 140 BPM · Backing band" for the band, else "Recorded". */
+function subtitle(meta: TrackMeta, driver: Driver): string {
   const where =
-    driver === 'spotify' ? (clock.last?.deviceName ? `on ${clock.last.deviceName}` : 'Spotify') : 'Recorded · manual clock'
+    driver === 'spotify'
+      ? clock.last?.deviceName
+        ? `on ${clock.last.deviceName}`
+        : 'Spotify'
+      : driver === 'audio'
+        ? 'Backing band'
+        : 'Recorded · manual clock'
   return meta.artist ? `${meta.artist} · ${where}` : where
 }
 
@@ -117,7 +124,7 @@ function NowPlaying({ meta }: { meta: TrackMeta }) {
   )
 }
 
-function Progress({ durationMs, positionMs }: { durationMs: number; positionMs: number }) {
+function Progress({ tl, durationMs, positionMs }: { tl: Timeline; durationMs: number; positionMs: number }) {
   const fill = useRef<HTMLElement>(null)
   const time = useRef<HTMLSpanElement>(null)
   const range = useRef<HTMLInputElement>(null)
@@ -130,10 +137,10 @@ function Progress({ durationMs, positionMs }: { durationMs: number; positionMs: 
       if (range.current && !dragging.current) range.current.value = String(Math.round(pos))
     }
     frameBus.add(f)
-    // Spotify gets one seek when the thumb is let go (the native change event, not React's per-move onChange).
+    // Spotify and the band get one seek when the thumb is let go (the native change event, not React's onChange).
     const el = range.current
     const release = () => {
-      if (el && useSession.getState().driver === 'spotify') activeTransport().seek(Number(el.value))
+      if (el && useSession.getState().driver !== 'manual') activeTransport().seek(Number(el.value))
     }
     el?.addEventListener('change', release)
     return () => {
@@ -147,6 +154,7 @@ function Progress({ durationMs, positionMs }: { durationMs: number; positionMs: 
         {fmt(positionMs)}
       </span>
       <div className="pbar">
+        <LoopBand durationMs={durationMs} />
         <i ref={fill} />
         <input
           type="range"
@@ -166,6 +174,7 @@ function Progress({ durationMs, positionMs }: { durationMs: number; positionMs: 
         />
       </div>
       <span className="mono">{fmt(durationMs)}</span>
+      <LoopButton tl={tl} />
     </div>
   )
 }
@@ -256,7 +265,7 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
   return (
     <div className="stand">
       <NowPlaying meta={meta} />
-      <Progress durationMs={tl.durationMs} positionMs={m.positionMs} />
+      <Progress tl={tl} durationMs={tl.durationMs} positionMs={m.positionMs} />
 
       <div className="chips">
         {home && (

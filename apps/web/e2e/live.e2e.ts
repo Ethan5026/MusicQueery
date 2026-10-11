@@ -20,6 +20,7 @@ class FakePlayer {
   since = Date.now()
   stamp = Date.now()
   seeks: number[] = []
+  searches: string[] = []
 
   progress(): number {
     return this.playing ? this.base + (Date.now() - this.since) : this.base
@@ -65,8 +66,23 @@ class FakePlayer {
         return route.fulfill({ status: 204 })
       }
       if (url.pathname === '/v1/me/player/play') {
-        this.set({ playing: true })
+        const uri = (req.postDataJSON() as { uris?: string[] } | null)?.uris?.[0]
+        this.set(uri ? { playing: true, trackId: uri.split(':')[2]!, base: 0 } : { playing: true })
         return route.fulfill({ status: 204 })
+      }
+      if (url.pathname === '/v1/search') {
+        this.searches.push(url.searchParams.get('q') ?? '')
+        return route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            tracks: {
+              items: [
+                { id: LET_IT_BE_ID, name: 'Let It Be - Remastered 2009', duration_ms: 243_026, artists: [{ name: 'The Beatles' }], album: { name: 'Let It Be' } },
+                { id: UNKNOWN_ID, name: 'Unknown Song', duration_ms: 180_000, artists: [{ name: 'Nobody' }], album: { name: 'X' } },
+              ],
+            },
+          }),
+        })
       }
       if (url.pathname === '/v1/me/player/pause') {
         this.set({ playing: false })
@@ -244,4 +260,45 @@ test('Tracks lists the playlist inbox with each song’s state; a failed one can
 
   await inbox.locator('.trow', { hasText: 'Let It Be' }).click()
   await expect(hero(page)).toBeVisible()
+})
+
+// ---------------------------------------------------------------- M6: On Spotify and the Spotify A–B loop
+
+test('On Spotify: search, see which results are analysed, play one and Stand follows it', async ({ page }) => {
+  sp.trackId = null
+  await page.context().route('**/api/status?*', (r) =>
+    r.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ tracks: [{ id: `spotify:track:${LET_IT_BE_ID}`, state: 'analysed' }, { id: `spotify:track:${UNKNOWN_ID}`, state: 'new' }] }),
+    }),
+  )
+  await page.goto('/#tracks')
+  await page.locator('label[for="tsrc-spot"]').click()
+  await page.getByRole('button', { name: 'play-along' }).click()
+  expect(sp.searches).toEqual(['play-along'])
+  const rows = page.getByRole('listitem')
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(0)).toContainText('Analysed')
+  await expect(rows.nth(1)).toContainText('Needs a listen')
+  await rows.nth(0).click()
+  await page.getByRole('button', { name: 'Play on Spotify' }).click()
+  await expect(page.locator('.np-title')).toHaveText('Let It Be - Remastered 2009')
+  await expect(badge(page)).toHaveText(/±\d+ ms|Re-syncing/)
+})
+
+test('the A–B loop on a Spotify track seeks back to A just before B', async ({ page }) => {
+  // start a little before the end of the bar that holds 30 s, playing
+  const i = bars.findIndex((b) => b.startMs > 30_000)
+  const barStart = bars[i - 1]!.startMs
+  const barEnd = bars[i]!.startMs
+  sp.set({ playing: true, base: barStart + 200 })
+  await page.goto('/')
+  await expect(badge(page)).toHaveText(/±\d+ ms/, { timeout: 10_000 })
+  await page.getByTestId('loop').click()
+  await page.getByTestId('loop').click() // a one-bar loop
+  await expect(page.getByTestId('loop')).toHaveText(/✕/)
+  await expect.poll(() => sp.seeks.length, { timeout: 10_000 }).toBeGreaterThan(0)
+  // aimed at A (less the start bias, which is 0 here), sent within a second before B
+  expect(Math.abs(sp.seeks[0]! - barStart)).toBeLessThan(5)
+  expect(barEnd - barStart).toBeGreaterThan(1000)
 })

@@ -1,11 +1,12 @@
-// IndexedDB (D-15): settings, cached timelines and track names, so the app opens offline.
+// IndexedDB (D-15): settings, cached timelines and track names, so the app opens offline; v2 (M6) adds `charts`
+// (iReal Pro imports, by chart id).
 // A tiny promise wrapper; every call fails soft (private mode or blocked storage) and logs.
 import { log } from '../debug/log'
 
 const DB = 'musicqueery'
-const VERSION = 1
-export type StoreName = 'settings' | 'timelines' | 'tracks'
-const STORES: StoreName[] = ['settings', 'timelines', 'tracks']
+const VERSION = 2
+export type StoreName = 'settings' | 'timelines' | 'tracks' | 'charts'
+const STORES: StoreName[] = ['settings', 'timelines', 'tracks', 'charts']
 
 let opening: Promise<IDBDatabase | null> | null = null
 
@@ -60,3 +61,39 @@ export const idbDelete = async (store: StoreName, key: string): Promise<void> =>
 
 export const idbKeys = async (store: StoreName): Promise<string[]> =>
   ((await run(store, 'readonly', (s) => s.getAllKeys())) ?? []).map(String)
+
+/** Writes many entries in one transaction (an imported playlist); resolves false if it failed. */
+export async function idbPutMany(store: StoreName, entries: Array<[string, unknown]>): Promise<boolean> {
+  const db = await open()
+  if (!db) return false
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(store, 'readwrite')
+      const s = tx.objectStore(store)
+      for (const [k, v] of entries) s.put(v, k)
+      tx.oncomplete = () => resolve(true)
+      tx.onerror = tx.onabort = () => {
+        log('warn', 'idb.failed', { store, mode: 'putMany', err: String(tx.error) })
+        resolve(false)
+      }
+    } catch (err) {
+      log('warn', 'idb.failed', { store, mode: 'putMany', err: String(err) })
+      resolve(false)
+    }
+  })
+}
+
+export async function idbDeleteMany(store: StoreName, keys: string[]): Promise<void> {
+  const db = await open()
+  if (!db) return
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction(store, 'readwrite')
+      const s = tx.objectStore(store)
+      for (const k of keys) s.delete(k)
+      tx.oncomplete = tx.onerror = tx.onabort = () => resolve()
+    } catch {
+      resolve()
+    }
+  })
+}

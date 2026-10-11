@@ -16,6 +16,7 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/kalam": "^5.3.0",
     "@fontsource/noto-music": "^5.3.0",
+    "@mq/band": "workspace:*",
     "@mq/model": "workspace:*",
     "@mq/theory": "workspace:*",
     "eruda": "^3.4.3",

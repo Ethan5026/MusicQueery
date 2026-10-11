@@ -72,8 +72,36 @@ export async function fetchTrack(id: string): Promise<{ title: string; artist: s
   return { title: j.name, artist: j.artists?.map((a) => a.name).join(', ') ?? '' }
 }
 
-async function command(method: string, path: string): Promise<void> {
-  const res = await call(path, { method })
+export interface SearchTrack {
+  id: string
+  title: string
+  artist: string
+  album: string
+  durationMs: number
+}
+
+/** Track search (dev mode rejects limit > 10, D-35). Throws on HTTP errors, with 429 marked. */
+export async function searchTracks(q: string): Promise<SearchTrack[]> {
+  const res = await call(`/search?type=track&limit=10&q=${encodeURIComponent(q)}`)
+  if (res.status === 429) throw new Error(`Spotify is limiting requests; try again in ${res.headers.get('Retry-After') ?? 'a few'} s`)
+  if (!res.ok) throw new Error(`search ${res.status}`)
+  const j = (await res.json()) as {
+    tracks?: { items: { id: string; name: string; duration_ms: number; artists?: { name: string }[]; album?: { name: string } }[] }
+  }
+  return (j.tracks?.items ?? []).map((t) => ({
+    id: t.id,
+    title: t.name,
+    artist: t.artists?.map((a) => a.name).join(', ') ?? '',
+    album: t.album?.name ?? '',
+    durationMs: t.duration_ms,
+  }))
+}
+
+async function command(method: string, path: string, body?: unknown): Promise<void> {
+  const res = await call(path, {
+    method,
+    ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }),
+  })
   log(res.ok ? 'info' : 'warn', 'spotify.command', { method, path, status: res.status })
   if (!res.ok) throw new Error(`${method} ${path} ${res.status}`)
 }
@@ -83,4 +111,7 @@ export const player = {
   pause: () => command('PUT', '/me/player/pause'),
   next: () => command('POST', '/me/player/next'),
   seek: (ms: number) => command('PUT', `/me/player/seek?position_ms=${Math.max(0, Math.round(ms))}`),
+  /** Plays one track, on `deviceId` when given (wakes the last device when nothing is active). */
+  playTrack: (id: string, deviceId?: string | null) =>
+    command('PUT', `/me/player/play${deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : ''}`, { uris: [`spotify:track:${id}`] }),
 }

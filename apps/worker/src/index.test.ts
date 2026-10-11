@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest'
-import worker, { type Env, corsHeaders, isAuthorised } from './index'
+import worker, { type Env, IREAL_PAGE, corsHeaders, irealPlaylists, isAuthorised } from './index'
 
 const allowed = 'https://musicqueery.ethangruening.workers.dev,http://127.0.0.1:5173'
 
@@ -261,4 +261,54 @@ test('a bad inbox is refused', async () => {
   expect((await put({ playlistId: PLAYLIST, tracks: [{ id: 'spotify:episode:1111111111111111111111' }] })).status).toBe(422)
   expect((await put({ playlistId: PLAYLIST, tracks: Array.from({ length: 301 }, () => ({ id: ID })) })).status).toBe(422)
   expect((await put({ playlistId: PLAYLIST, tracks: [] })).status).toBe(200)
+})
+
+// ---------------------------------------------------------------- M6: status and iReal playlists
+
+test('status gives the analysis state of up to 10 tracks, publicly', async () => {
+  const env = makeEnv()
+  await call(env, 'PUT', `/api/timelines/${ID}`, { body: timeline(ID), auth: SECRET })
+  await call(env, 'POST', `/api/queue/${QID}`, { body: {}, auth: SECRET })
+  const r = await call(env, 'GET', `/api/status?ids=${ID},${QID},${NEW_ID}`)
+  expect(r.status).toBe(200)
+  expect(((await r.json()) as { tracks: unknown[] }).tracks).toEqual([
+    { id: ID, state: 'analysed' },
+    { id: QID, state: 'queued' },
+    { id: NEW_ID, state: 'new' },
+  ])
+  expect((await call(env, 'GET', '/api/status?ids=chart:x')).status).toBe(400)
+  expect((await call(env, 'GET', '/api/status')).status).toBe(400)
+  const eleven = Array.from({ length: 11 }, () => ID).join(',')
+  expect((await call(env, 'GET', `/api/status?ids=${eleven}`)).status).toBe(400)
+})
+
+const IREAL_HTML = `<a href="irealb://Song%20A%3DX%3D%3D%3DSong%20B%3DY%3D%3D%3DJazz%201460">Jazz</a>
+  <a href="irealb://Single%3DZ%3DStyle%3DC%3Dn%3D1r34LbKcu7">one song</a>
+  <a href="irealb://S1%3D%3D%3DS2%3D%3D%3DS3%3D%3D%3DBlues%2050">Blues</a>`
+
+test('finds the playlists on iReal’s page and skips single songs', () => {
+  expect(irealPlaylists(IREAL_HTML).map(({ name, songs }) => ({ name, songs }))).toEqual([
+    { name: 'Jazz 1460', songs: 2 },
+    { name: 'Blues 50', songs: 3 },
+  ])
+})
+
+test('relays iReal’s official playlists: the list, then one link', async () => {
+  const env = makeEnv()
+  const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    expect(String(input instanceof Request ? input.url : input)).toBe(IREAL_PAGE)
+    return new Response(IREAL_HTML)
+  })
+  try {
+    const list = (await (await call(env, 'GET', '/api/ireal/playlists')).json()) as { playlists: unknown[] }
+    expect(list.playlists).toEqual([
+      { n: 0, name: 'Jazz 1460', songs: 2 },
+      { n: 1, name: 'Blues 50', songs: 3 },
+    ])
+    const one = await call(env, 'GET', '/api/ireal/playlists/1')
+    expect(await one.text()).toMatch(/^irealb:\/\/S1/)
+    expect((await call(env, 'GET', '/api/ireal/playlists/7')).status).toBe(404)
+  } finally {
+    spy.mockRestore()
+  }
 })

@@ -6,6 +6,9 @@
 // M5b: the playlist inbox. `mqc watch` mirrors the inbox playlist here (PUT /api/inbox, secret) after queueing its new
 // songs; the phone reads GET /api/inbox (public, like timelines) with each song's state, so it never reads playlists
 // from Spotify itself (D-35: playlist reads are the ones that get quota-blocked).
+// M6: GET /api/status?ids= gives the analysis state of up to 10 Spotify tracks (On Spotify search results), and
+// GET /api/ireal/playlists[/:n] relays iReal Pro's official playlist page (one fixed URL, cached a day) so the
+// phone can import Jazz 1460 & co. with a tap; the page can't be fetched cross-origin from the PWA.
 
 import { Timeline } from '@mq/model'
 
@@ -33,6 +36,9 @@ const INBOX_KEY = 'inbox'
 const MAX_INBOX = 300
 const MAX_INBOX_BYTES = 128 * 1024
 const PLAYLIST_ID = /^[A-Za-z0-9]{22}$/
+const MAX_STATUS_IDS = 10
+export const IREAL_PAGE = 'https://www.irealpro.com/main-playlists/'
+const IREAL_CACHE_S = 86400
 
 export type QueueState = 'queued' | 'working' | 'failed'
 
@@ -105,6 +111,51 @@ export async function spotifyUser(token: string | null, allowed: string | undefi
 }
 
 const clip = (v: unknown, n = 200): string | undefined => (typeof v === 'string' && v ? v.slice(0, n) : undefined)
+
+/** A Spotify track's analysis state from the store and the queue (2 KV reads). */
+async function songState(store: KVNamespace, id: string): Promise<{ state: InboxState; error?: string }> {
+  if ((await store.get(TIMELINE_PREFIX + id)) !== null) return { state: 'analysed' }
+  const q = await store.get(QUEUE_PREFIX + id)
+  if (q === null) return { state: 'new' }
+  const item = JSON.parse(q) as QueueItem
+  return { state: item.state, ...(item.error ? { error: item.error } : {}) }
+}
+
+export interface IrealPlaylistLink {
+  name: string
+  songs: number
+  link: string
+}
+
+/** The irealb:// playlist links on iReal's page (single-song links skipped). */
+export function irealPlaylists(html: string): IrealPlaylistLink[] {
+  const out: IrealPlaylistLink[] = []
+  for (const m of html.matchAll(/href="(irealbook:\/\/[^"]+|irealb:\/\/[^"]+)"/g)) {
+    const link = m[1]!
+    let parts: string[]
+    try {
+      parts = decodeURIComponent(link).split('===')
+    } catch {
+      continue
+    }
+    if (parts.length < 3) continue
+    out.push({ name: parts[parts.length - 1]!.trim(), songs: parts.length - 1, link })
+  }
+  return out
+}
+
+/** iReal's playlist page, from the edge cache when fresh. */
+async function irealPage(): Promise<string> {
+  const cache = typeof caches !== 'undefined' ? (caches as unknown as { default: Cache }).default : null
+  const key = new Request(IREAL_PAGE)
+  const hit = await cache?.match(key)
+  if (hit) return hit.text()
+  const res = await fetch(IREAL_PAGE, { headers: { 'user-agent': 'Mozilla/5.0 (MusicQueery)' } })
+  if (!res.ok) throw new Error(`irealpro.com ${res.status}`)
+  const html = await res.text()
+  await cache?.put(key, new Response(html, { headers: { 'Cache-Control': `max-age=${IREAL_CACHE_S}` } }))
+  return html
+}
 
 export interface TimelineMeta {
   source: string
@@ -273,15 +324,7 @@ export default {
         const v = await env.STORE.get(INBOX_KEY)
         if (v === null) return reply('no inbox', 404, { 'Cache-Control': 'no-store' })
         const doc = JSON.parse(v) as InboxDoc
-        const tracks = await Promise.all(
-          doc.tracks.map(async (t) => {
-            if ((await env.STORE.get(TIMELINE_PREFIX + t.id)) !== null) return { ...t, state: 'analysed' as InboxState }
-            const q = await env.STORE.get(QUEUE_PREFIX + t.id)
-            if (q === null) return { ...t, state: 'new' as InboxState }
-            const item = JSON.parse(q) as QueueItem
-            return { ...t, state: item.state as InboxState, ...(item.error ? { error: item.error } : {}) }
-          }),
-        )
+        const tracks = await Promise.all(doc.tracks.map(async (t) => ({ ...t, ...(await songState(env.STORE, t.id)) })))
         return reply(JSON.stringify({ ...doc, tracks }), 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
       }
       if (!authorised) return reply('unauthorised', 401)
@@ -305,6 +348,31 @@ export default {
         return json({ playlistId: doc.playlistId, tracks: doc.tracks.length, updatedAt: doc.updatedAt })
       }
       return reply('method', 405)
+    }
+
+    if (url.pathname === '/api/status') {
+      if (req.method !== 'GET') return reply('method', 405)
+      const ids = (url.searchParams.get('ids') ?? '').split(',').filter(Boolean)
+      if (ids.length === 0 || ids.length > MAX_STATUS_IDS) return reply(`1 to ${MAX_STATUS_IDS} ids`, 400)
+      if (!ids.every((id) => QUEUE_ID.test(id))) return reply('bad id', 400)
+      const states = await Promise.all(ids.map(async (id) => ({ id, ...(await songState(env.STORE, id)) })))
+      return reply(JSON.stringify({ tracks: states }), 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    }
+
+    if (url.pathname === '/api/ireal/playlists' || url.pathname.startsWith('/api/ireal/playlists/')) {
+      if (req.method !== 'GET') return reply('method', 405)
+      let lists: IrealPlaylistLink[]
+      try {
+        lists = irealPlaylists(await irealPage())
+      } catch (err) {
+        return reply(String(err), 502)
+      }
+      const rest = url.pathname.slice('/api/ireal/playlists'.length)
+      if (!rest) return json({ source: IREAL_PAGE, playlists: lists.map(({ name, songs }, i) => ({ n: i, name, songs })) })
+      const n = Number(rest.slice(1))
+      const pl = Number.isInteger(n) ? lists[n] : undefined
+      if (!pl) return reply('not found', 404)
+      return reply(pl.link, 200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'max-age=3600' })
     }
 
     if (url.pathname === '/api/timelines') {

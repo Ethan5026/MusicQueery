@@ -4,7 +4,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { isStandalone } from './config'
 import { log, startRemoteLog } from './debug/log'
 import { perf } from './perf'
-import { restoreSession, runClock, useApp } from './services'
+import { loadBandPrefs, restoreSession, runClock, useApp } from './services'
 import { handleCallback } from './spotify/auth'
 import { loadSettings } from './store/settings'
 import { Shell } from './ui/Shell'
@@ -31,7 +31,7 @@ registerSW({
 
 void navigator.storage?.persist?.().then((persisted) => log('info', 'storage.persist', { persisted }))
 
-void Promise.all([handleCallback(), loadSettings()]).then(([handled]) => {
+void Promise.all([handleCallback(), loadSettings(), loadBandPrefs()]).then(([handled]) => {
   if (handled) useApp.getState().refreshAuth()
   runClock()
   perf.start()

@@ -1,6 +1,7 @@
 // The sync badge (sketch "When things aren't perfect"): how far to trust the chart right now.
 // Locked (±ms), Re-syncing (after a seek, skip or network hiccup), Paused, Not connected; plus Nothing
-// playing (Spotify has no active device) and Manual (the app's own clock).
+// playing (Spotify has no active device), Manual (the app's own clock) and Band (the backing band, M6, with its
+// count-in).
 
 export type SyncState =
   | { kind: 'locked'; ms: number }
@@ -9,6 +10,7 @@ export type SyncState =
   | { kind: 'idle' }
   | { kind: 'offline' }
   | { kind: 'manual'; playing: boolean }
+  | { kind: 'band'; playing: boolean; countIn: number }
 
 export interface SyncInput {
   authed: boolean

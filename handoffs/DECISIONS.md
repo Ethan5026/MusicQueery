@@ -197,6 +197,38 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   the inbox queued something. What the watcher just finished overrides the lagging list for 2 min (done → dropped, failed stays
   failed), so a KV echo can't start the same analysis twice.
 
+- **D-57** (M6) `packages/band` (pure TS) turns a chart into band events. `formFromChart` uses the same expansion and chorus count
+  as `chartTimeline`, so beat b is at b × 60000 / bpm ms on both. `Arranger.bar(i)` returns one bar of piano, bass and drums,
+  seeded by (seed, bar) so a bar sounds the same after a seek; voice leading carries over only between consecutive bars.
+  Styles: swing, ballad, bossa, waltz, pop, funk, plus drone, with iReal style text mapped by keyword (`styleFor`) and swing
+  flattening from 2/3 at ≤ 120 BPM to 0.55 at 260. Bass walks (root on each chord, chord tones towards the next root, then an
+  approach note) or plays the style's pattern. Piano uses rootless A/B voicings for 7th chords (5th → 13th on dominants) and
+  close triads otherwise, nearest the last voicing; off-beat hits just before a change anticipate the next chord. Built-in
+  tunes (12) and drills (7, all-keys ones cycling up a fourth from the user's key) are plain Chart v1, so they get exact timelines.
+- **D-58** (M6, SP5, supersedes D-21's "Tone.js or smplr") Own sampler and scheduler on a self-hosted kit: Salamander piano
+  every minor third A1–C7 (CC BY 3.0), Smolken double-bass pizz (CC0), 11 VCSL drum hits (CC0). 44 mono mp3s, 1.7 MB, precached
+  by the service worker. At load each buffer's onset (first sample > 5% of peak, less 2 ms) is skipped, because mp3/AAC encoder
+  padding would make every note late, and it is normalised to its peak. Credits are in Settings and `public/samples/CREDITS.md`.
+- **D-59** (M6) `BandEngine` (`audio/engine.ts`) is the AudioClock and the third Stand driver, `'audio'`. A 25 ms timer
+  schedules whole bars once they start within 250 ms. The audible position comes from `getOutputTimestamp()` (fallback:
+  currentTime − outputLatency). A count-in (0–2 bars of cross-stick, on every start from pause) holds the chart at the top.
+  Tempo, key, style and chorus changes keep the beat and apply while playing. The AudioContext uses `latencyHint: 'playback'`
+  and is unlocked inside the Play tap with `navigator.audioSession.type = 'playback'`. While the band plays, Spotify takes over
+  only when it starts playing (the band pauses); starting the band pauses Spotify. A saved session can be a `BandSpec`.
+- **D-60** (M6) The A–B loop on Stand works on bar lines for every driver: tap on the first bar, then on the last, then again
+  to clear. The band loops exactly in the scheduler; the manual clock seeks in its frame tick. Spotify sends the seek back to A
+  `lead` ms before B; the lead starts at 150 ms and is learned from how long each jump took to land (80–800 ms, `loop.jump` log).
+- **D-61** (M6) iReal import: `GET /api/ireal/playlists[/:n]` relays irealpro.com's official playlist page (one fixed URL,
+  edge-cached a day; the PWA can't fetch it cross-origin), or the user pastes an irealb:// link or picks a file. Charts are
+  stored 100 per IndexedDB `charts` record, with an index of every chart in `settings/chartIndex`: WebKit pays per record,
+  and Jazz 1460 took 24.5 s as one record per chart against 2.1 s chunked (Playwright WebKit on Windows).
+- **D-62** (M6) On Spotify: search with `/search?type=track&limit=10` (a player-side call, unaffected by D-35's playlist blocks).
+  Each result's state comes from `GET /api/status?ids=` (≤ 10, public, 2 KV reads each, shared with the inbox's logic), and a
+  pick plays with `PUT /me/player/play {uris}` on the last known device. Unanalysed picks get the M5 Analyse button.
+- **D-63** (M6) Playwright's WebKit on Windows has no `AudioContext`, so band e2e tests install a fake one (clock on
+  `performance.now()`, silent buffers). The real sound, latency and timing are checked by the SP5 card on the iPhone. Without
+  Web Audio, Play explains why on the band card instead of opening a paused Stand.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries

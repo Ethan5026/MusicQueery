@@ -74,6 +74,8 @@ const SYNC_LABEL = (st: SyncState): [string, string] => {
       return ['alert', 'Not connected']
     case 'manual':
       return ['idle', st.playing ? 'Manual' : 'Paused']
+    case 'band':
+      return st.countIn > 0 ? ['warn', `Count-in ${st.countIn}`] : ['ok', st.playing ? 'Band' : 'Paused']
   }
 }
 
