@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "ship": "pnpm --filter @mq/web build && pnpm --filter @mq/worker run deploy",
-    "tail": "pnpm --filter @mq/worker tail"
+    "tail": "pnpm --filter @mq/worker tail",
+    "companion": "python -m uv run --project companion mqc"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

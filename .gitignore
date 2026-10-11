@@ -9,3 +9,11 @@ coverage/
 
 # iReal corpus (shared playlists, kept out of git)
 packages/theory/corpus/
+
+# companion: venv, locally built wheels, ground-truth audio is never committed
+companion/.venv/
+companion/.wheels/
+__pycache__/
+*.wav
+companion/capture/bin/
+companion/out/

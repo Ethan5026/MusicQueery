@@ -8,12 +8,14 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
-    "corpus": "node scripts/fetch-corpus.ts"
+    "corpus": "node scripts/fetch-corpus.ts",
+    "bridge": "esbuild scripts/bridge.ts --bundle --platform=node --format=esm --outfile=dist/bridge.mjs --log-level=warning"
   },
   "dependencies": {
     "@mq/model": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.19.0"
+    "@types/node": "^24.19.0",
+    "esbuild": "^0.28.1"
   }
 }
