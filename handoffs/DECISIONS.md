@@ -269,6 +269,12 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   shift (the mic offset). Playwright gets a fake mic (`e2e/fake-mic.ts`) that streams a synthesised loop into the real
   decoder Worker, as D-63 did for the band.
 
+- **D-70** (M7, SP7 on the iPhone, Let It Be on the Fire TV, test mode) Over real speakers the mic decodes well: shifted by
+  −2.55 s the saved chords score majmin 89.7%, sevenths 77.9% per beat over 100–185 s (86–96% in each third, no drift;
+  75% over 8–31 s at −2.05 s), above the simulated room (D-65). As saved they are ~2.5 s late (majmin 10%), so the
+  exit is not met until the offset is found and corrected and 3 songs are re-tested. `score-live` searches ±5 s per
+  stretch of listening.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries

@@ -1,6 +1,6 @@
 # M7 · Listening live + Predicted
 
-**Status:** done (built, tested offline, deployed; the over-speaker test on the iPhone (SP7) waits on the user, see Open) · 2026-10-11 · **Next:** M8 or M9
+**Status:** done, with one fix owed: SP7 on the iPhone heard the chords well but stamped them ~2.5 s late (see Verified, Open) · 2026-10-11 · **Next:** SP7 offset fix, then M8 or M9
 **Commit:** see `git log` for "S7|M7:" (pushed to origin/main)
 
 ## Goal of this stage
@@ -15,6 +15,7 @@ and lines an iReal chart up with a recording so its chord names replace the hear
 - D-67 chord fixes: own IndexedDB store + `/api/edits/:id`, by time span over any timeline, written-pitch picker
 - D-68 chart link: Jump Alignment on labels, all keys × tempo ratios, trusted only if roots agree and few jumps
 - D-69 SP7 tooling: Mic test card (agreement with the analysis as it plays), `score-live` on the PC, fake mic e2e
+- D-70 SP7 on the iPhone: recognition over the Fire TV 86–96% per beat once aligned; saved times ~2.5 s late
 - P-05 updated: harmony-only sections measured, not shown; a linked chart's rehearsal marks are M7's sections
 
 ## Built
@@ -55,19 +56,28 @@ and lines an iReal chart up with a recording so its chord names replace the hear
   - sections (P-05), boundary F at ±3 s vs Isophonics segments (4 songs): human chords 0.65, PC analysis 0.43, live 0.23
   - decoder speed in Node ≈ 100× real time; Worker bundle 27 kB
 - Deployed (version de486c92): `/api/live/bad` → `bad id`, unauthenticated PUT → 401, `/api/health` ok
-- Not verified: the iPhone's mic over real speakers (SP7), raw-constraint honouring on iOS 27, decoder CPU on the phone
+- **SP7, iPhone over the Fire TV** (Let It Be, test mode, `reports/m7-sp7-iphone.txt`): the chords are right but late.
+  100–185 s: as saved majmin 10.3%, shifted −2550 ms → **majmin 89.7%, sevenths 77.9%** (86–96% in each third, no
+  drift); 8–31 s: best −2050 ms → 75.0%. Nothing was saved 31–100 s (a second segment began there). Beat grid within a
+  beat of the truth. Chords and key (C major) look right; one song, so the "3 tracks" exit is not met yet
+- Not verified: where the 2.5 s comes from, raw-constraint honouring on iOS 27 (card values not reported), CPU on the phone
 
 ## Open
-- [ ] user (SP7): Settings → Show sync tools → Mic test. Play Let It Be (or Something, Human Nature, It's Too Late)
-      on the Fire TV, Start, leave the phone where you practise for the whole song, Stop, Send. Then I run
-      `pnpm --filter @mq/listen score-live` (per-beat score vs the human truth + the best time shift = mic offset).
-      Exit: 3 tracks ≥ 55% per beat, confidence visible. Note what the card says for echo cancel / noise supp. / gain
+- [ ] **next session first: the ~2.5 s offset.** Asked the user (no answer yet): (1) what the Mic test card's
+      "vs analysis" % showed while playing. High → only the saved times are shifted (a mapping bug in
+      `decoder.worker.ts` `trackAt`/`f0` or `listener.ts` `sendAnchor`); low → the mic audio reaches the decoder ~2.5 s
+      late (iOS buffering), so live chords on Stand lag too. (2) What happened at 0:31 (pause, seek, left the app?) —
+      explains the 31–100 s gap. Log lines are not kept (`/api/log` only reaches `pnpm tail`), so run `pnpm tail` during
+      the next test. Planned fix either way: the Mic test card measures the offset on an analysed track (best shift of
+      the live chords against the analysis, ±5 s), shows it, and keeps it as a per-phone mic correction applied in the
+      anchors; then re-run SP7 on 3 truth songs (Let It Be, Something, Human Nature / It's Too Late) and `score-live`
+- [ ] user (SP7 re-run after the fix): exit is 3 tracks ≥ 55% per beat as saved, confidence visible; note the card's
+      echo cancel / noise supp. / gain values
 - [ ] user: a song with no analysis: Stand → "Listen with the mic". Look for confidence, grey Predicted after the
       first chorus, landscape lead sheet while listening, and that the next play opens "Heard live" with look-ahead
 - [ ] user: fix a chord (tap it), and link a chart (fix sheet → "Link an iReal chart…", after importing Pop 400)
 - [ ] unverified: listening while Spotify plays on the phone itself (`play-and-record` may route output to the earpiece)
-- [ ] known: double-time beats on ballads halve the live bars; bass below the speaker's range defeats the root; a
-      mic offset (if score-live finds one) needs a constant in `listener.ts` `sendAnchor`
+- [ ] known: double-time beats on ballads halve the live bars; bass below the speaker's range defeats the root
 - [ ] carried from M6: SP5 audio test, Fire TV loop gap, iPhone Jazz 1460 import; M5b live inbox check; P-05, P-06
 - [ ] next stage: M8 (Map, Coach, polish; P-05 sections: `findSections` + chart rehearsal marks) or M9 (Melody)
 
@@ -78,7 +88,8 @@ and lines an iReal chart up with a recording so its chord names replace the hear
 
 ## Next prompt
 ```
-Read CLAUDE.md, handoffs/DECISIONS.md and handoffs/M7-listen.md, then the M8 row in handoffs/02-dev-plan.md.
-Then do M8: Map, Coach, polish (Song map with sections — P-05: chart rehearsal marks, then findSections on analysed
-timelines; Scale coach). First run `pnpm --filter @mq/listen score-live` and fold any SP7 results into DECISIONS.
+Read CLAUDE.md, handoffs/DECISIONS.md and handoffs/M7-listen.md. First finish M7's SP7: find and fix the ~2.5 s
+offset in live chord times (see Open; ask me the two questions if I haven't answered), add the measured per-phone mic
+correction to the Mic test card, deploy, and have me re-run SP7 on 3 truth songs; score with
+`pnpm --filter @mq/listen score-live`. Then read the M8 row in handoffs/02-dev-plan.md and do M8: Map, Coach, polish.
 ```
