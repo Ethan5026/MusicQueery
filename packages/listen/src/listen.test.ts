@@ -8,6 +8,7 @@ import { FFT, hann } from './fft'
 import { Frontend } from './frontend'
 import { LiveDecoder } from './live'
 import { decodeOffline } from './offline'
+import { bestShift, chirp, findEcho } from './offset'
 import { encodeHarte, scoreBeats } from './score'
 import { boundaryF, findSections } from './sections'
 import { barPhase, liveTimeline, mergeLive } from './timeline'
@@ -276,5 +277,35 @@ describe('sections', () => {
     expect(s.map((x) => x.label).join('')).toBe('AABA')
     expect(s.map((x) => x.startMs)).toEqual([0, 16000, 32000, 48000])
     expect(boundaryF([0, 16000, 32000, 48000], [0, 17000, 32000, 60000])).toBeCloseTo(2 / 3)
+  })
+})
+
+describe('timing offsets', () => {
+  test('finds an echo 2.5 s into a noisy, reverberant recording', () => {
+    const sr = 48000
+    const probe = chirp(sr)
+    const rec = new Float32Array(sr * 4)
+    let seed = 7
+    const noise = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * 0.2
+    for (let i = 0; i < rec.length; i++) rec[i] = noise()
+    const at = Math.round(2.5 * sr)
+    for (const [d, g] of [[0, 0.3], [600, 0.12], [1700, 0.06]] as const) {
+      for (let j = 0; j < probe.length; j++) rec[at + d + j]! += g * probe[j]!
+    }
+    const e = findEcho(rec, probe, sr)
+    expect(e).not.toBeNull()
+    expect(Math.abs(e!.lag - at)).toBeLessThanOrEqual(2)
+    expect(findEcho(rec.subarray(0, at - sr / 10), probe, sr)).toBeNull()
+  })
+
+  test('the best shift undoes a constant stamping delay', () => {
+    const syms = ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'C']
+    const truth = Array.from({ length: 32 }, (_, i) => ({ startMs: i * 1600, endMs: (i + 1) * 1600, symbol: syms[i % 8]! }))
+    const beats = Array.from({ length: 32 * 2 }, (_, i) => i * 800)
+    const late = truth.slice(4, 28).map((c) => ({ ...c, startMs: c.startMs + 2500, endMs: c.endMs + 2500 }))
+    const s = bestShift(truth, beats, late)!
+    expect(s.shiftMs).toBe(-2500)
+    expect(s.majmin).toBe(1)
+    expect(s.at0).toBeLessThan(0.4)
   })
 })

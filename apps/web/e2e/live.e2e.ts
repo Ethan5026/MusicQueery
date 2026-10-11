@@ -339,6 +339,24 @@ test('listen with the mic on a track with no timeline: live chords, confidence, 
   await expect(page.locator('.src.live')).toHaveText('Heard live')
 })
 
+test('mic test: the echo test measures the phone round trip and keeps it', async ({ page }) => {
+  await page.addInitScript(FAKE_MIC)
+  await page.context().route('**/api/live/**', (r) => r.fulfill({ status: 404, body: '' }))
+  sp.set({ trackId: UNKNOWN_ID, base: 0, playing: true })
+  await page.goto('/#settings')
+  await page.getByRole('button', { name: 'Show sync tools and log' }).click()
+  const card = page.locator('section', { has: page.getByRole('heading', { name: 'Mic test (SP7)' }) })
+  await expect(card).toContainText('not measured')
+  await card.getByRole('button', { name: 'Start' }).click()
+  await card.getByRole('button', { name: 'Echo test' }).click()
+  // the fake mic hears the chirp 120 ms after it is played, three rounds
+  await expect(card).toContainText('phone round trip 120 ms', { timeout: 10_000 })
+  await card.getByRole('button', { name: 'Stop' }).click()
+  await page.reload()
+  await page.getByRole('button', { name: 'Show sync tools and log' }).click()
+  await expect(card).toContainText('phone round trip 120 ms')
+})
+
 test('fix a chord: it shows at once, is sent to the store, and survives a reload', async ({ page }) => {
   const puts: unknown[] = []
   await page.context().route('**/api/edits/**', (r) => {

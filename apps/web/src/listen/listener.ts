@@ -6,12 +6,19 @@
 //
 // Test mode (SP7, Settings → Diagnostics) decodes even when the track is analysed, and scores the live chord
 // against the analysed one as it plays; the live result is saved and uploaded too, for scoring on the PC.
+//
+// Timing (SP7 follow-up, D-70: saved chords were ~2.5 s late on the iPhone). A mic frame's track time is the
+// SpotifyClock position (which includes the speaker's calibrated offset) at the moment the sample was *recorded*.
+// `getOutputTimestamp` gives when a frame is *played*, so the phone's round trip (output → input, measured by the
+// echo test and kept per phone) is taken off. What is still late on an analysed track is the speaker's lag behind
+// Spotify's report: test mode measures it (`bestShift`) and can store it as that speaker's offset.
 import type { Timeline } from '@mq/model'
-import { LIVE_GENERATOR, liveTimeline, mergeLive } from '@mq/listen'
+import { LIVE_GENERATOR, type Shift, bestShift, chirp, findEcho, liveTimeline, mergeLive } from '@mq/listen'
 import { canonical, parseChord, pc } from '@mq/theory'
 import { create } from 'zustand'
+import { offsetFor, setOffset } from '../clock/offsets'
 import { log } from '../debug/log'
-import { clock, useSession } from '../services'
+import { clock, holdWake, useSession } from '../services'
 import { chordAt } from '../timeline/fetch'
 import { loadLive, saveLive } from '../timeline/live'
 import type { FinalMsg, FromWorker, NowMsg, ToWorker, TrackChord } from './decoder.worker'
@@ -26,6 +33,9 @@ interface AudioSessionLike {
 export interface ListenInfo {
   sampleRate?: number
   baseLatencyMs?: number
+  outputLatencyMs?: number
+  /** the echo test's stored round trip when listening started */
+  roundTripMs?: number | null
   settings?: MediaTrackSettings
   audioSession?: string
 }
@@ -43,6 +53,16 @@ interface ListenState {
   /** test mode: beats where the live chord matched the analysed one (root + third), of beats compared */
   agree: { hit: number; n: number }
   saved: number
+  /** test mode: the shift that best lines this segment's settled chords up with the analysis */
+  heard: Shift | null
+  echo: EchoState
+}
+
+export interface EchoState {
+  status: 'idle' | 'running' | 'done' | 'failed'
+  /** round trip per round (ms), null where no echo was found */
+  rounds: Array<number | null>
+  message?: string
 }
 
 export const useListen = create<ListenState>(() => ({
@@ -55,7 +75,36 @@ export const useListen = create<ListenState>(() => ({
   info: {},
   agree: { hit: 0, n: 0 },
   saved: 0,
+  heard: null,
+  echo: { status: 'idle', rounds: [] },
 }))
+
+// ---------------------------------------------------------------- the phone's mic round trip
+
+const ECHO_KEY = 'mq.micRoundTrip'
+
+/** The phone's measured output → input round trip (ms), or null if the echo test has not been run. */
+export function micRoundTripMs(): number | null {
+  try {
+    const raw = localStorage.getItem(ECHO_KEY)
+    const v = Number(raw)
+    return raw !== null && Number.isFinite(v) ? v : null
+  } catch {
+    return null
+  }
+}
+
+function setMicRoundTrip(ms: number | null): void {
+  try {
+    if (ms === null) localStorage.removeItem(ECHO_KEY)
+    else localStorage.setItem(ECHO_KEY, String(Math.round(ms)))
+  } catch {
+    // storage blocked: this session only
+  }
+  roundTrip = ms ?? 0
+}
+
+let roundTrip = micRoundTripMs() ?? 0
 
 let ctx: AudioContext | null = null
 let stream: MediaStream | null = null
@@ -75,7 +124,7 @@ export async function startListening(mode: ListenMode = 'listen'): Promise<boole
     useListen.setState({ mode })
     return true
   }
-  useListen.setState({ status: 'starting', mode, error: '', agree: { hit: 0, n: 0 } })
+  useListen.setState({ status: 'starting', mode, error: '', agree: { hit: 0, n: 0 }, heard: null })
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('this browser has no microphone access')
     if (typeof AudioWorkletNode === 'undefined') throw new Error('this browser has no AudioWorklet')
@@ -102,8 +151,9 @@ export async function startListening(mode: ListenMode = 'listen'): Promise<boole
     const ch = new MessageChannel()
     node.port.postMessage({ port: ch.port1 }, [ch.port1])
     send({ type: 'start', sampleRate: ctx.sampleRate, port: ch.port2 }, [ch.port2])
-    node.port.onmessage = (e: MessageEvent<{ type: 'meter'; peak: number; busyMs: number }>) => {
+    node.port.onmessage = (e: MessageEvent<WorkletMsg>) => {
       if (e.data.type === 'meter') useListen.setState({ peak: e.data.peak, workletMs: e.data.busyMs * 10 })
+      else if (e.data.type === 'recorded') onRecorded?.(e.data)
     }
     const src = ctx.createMediaStreamSource(stream)
     const mute = ctx.createGain()
@@ -122,7 +172,11 @@ export async function startListening(mode: ListenMode = 'listen'): Promise<boole
       baseLatencyMs: Math.round(ctx.baseLatency * 10000) / 10,
       ...(track ? { settings: track.getSettings() } : {}),
       ...(session ? { audioSession: session.type } : {}),
+      ...(ctx.outputLatency !== undefined ? { outputLatencyMs: Math.round(ctx.outputLatency * 10000) / 10 } : {}),
+      roundTripMs: micRoundTripMs(),
     }
+    // iOS stops the mic when the screen locks, so listening keeps it on (SP7 lost 70 s to a lock)
+    holdWake('listen', true)
     useListen.setState({ status: 'on', info })
     log('info', 'listen.start', { mode, ...info, settings: info.settings ? JSON.stringify(info.settings) : null })
     return true
@@ -156,6 +210,7 @@ export function stopListening(reason = 'stop'): void {
       // ignore
     }
   }
+  holdWake('listen', false)
   useListen.setState({ status: 'off', now: null, peak: 0 })
   useSession.setState({ live: null })
   log('info', 'listen.stop', { reason })
@@ -172,15 +227,17 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && useListen.getState().status === 'on') stopListening('hidden')
 })
 
-/** Mic frame ↔ track position, five times a second. */
+/** Mic frame ↔ track position, five times a second: when the frame is played, less the round trip = when its
+ *  input sample was recorded. */
 function sendAnchor(): void {
   if (!ctx) return
   const frame = Math.round(ctx.currentTime * ctx.sampleRate)
   const ts = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null
-  const perf =
+  const played =
     ts?.performanceTime && ts.contextTime !== undefined
       ? ts.performanceTime - (ts.contextTime - frame / ctx.sampleRate) * 1000
-      : performance.now() - (ctx.currentTime - frame / ctx.sampleRate) * 1000
+      : performance.now() + (ctx.outputLatency ?? 0) * 1000
+  const perf = played - roundTrip
   const tid = clock.trackId
   send({
     type: 'anchor',
@@ -210,6 +267,7 @@ function onWorker(m: FromWorker): void {
   if (m.type === 'final') return void onFinal(m)
   useListen.setState({ now: m })
   scoreTest(m)
+  measureShift(m)
   updateView(m)
 }
 
@@ -296,4 +354,111 @@ function triadKey(symbol: string): string | null {
   const c = parseChord(symbol)
   if (!c || c.kind !== 'chord') return null
   return `${pc(c.root)}${c.third === 'min' ? 'm' : ''}`
+}
+
+let lastShiftAt = 0
+
+/** Test mode, every 2 s: the shift (±5 s) that best lines this segment's settled chords up with the analysis. */
+function measureShift(m: NowMsg): void {
+  const s = useSession.getState()
+  if (useListen.getState().mode !== 'test' || !s.timeline || s.timeline.source === 'live' || s.id !== m.trackId) return
+  const at = performance.now()
+  if (at - lastShiftAt < 2000) return
+  lastShiftAt = at
+  const first = m.settled[0]
+  const last = m.settled[m.settled.length - 1]
+  if (!first || !last || last.endMs - first.startMs < 20000) return
+  useListen.setState({ heard: bestShift(s.timeline.chords, s.timeline.beats, m.settled) })
+}
+
+/** Is the measured shift clear enough to store? Enough beats, a good match, and well above the song's other repeats. */
+export function shiftUsable(h: Shift | null): h is Shift {
+  return !!h && h.beats >= 24 && h.majmin >= 0.6 && h.majmin - h.runnerUp >= 0.1
+}
+
+/** Stores the measured shift into the playing speaker's offset (D-51), so Stand and the mic both line up, and
+ *  starts a new segment (the current one's chords were stamped with the old offset). */
+export function applyHeardShift(): void {
+  const h = useListen.getState().heard
+  const device = clock.last?.deviceId ?? null
+  if (!shiftUsable(h) || !device) return
+  const before = offsetFor(device)
+  const ms = before + h.shiftMs
+  setOffset(device, ms, clock.last?.deviceName ?? null)
+  log('info', 'listen.offset', {
+    device: clock.last?.deviceName ?? device,
+    before,
+    ms,
+    shift: h.shiftMs,
+    majmin: h.majmin,
+    at0: h.at0,
+    beats: h.beats,
+    runnerUp: h.runnerUp,
+  })
+  send({ type: 'segment', reason: 'offset' })
+  lastScoredBeat = -1
+  useListen.setState({ heard: null, agree: { hit: 0, n: 0 } })
+}
+
+// ---------------------------------------------------------------- echo test
+
+type WorkletMsg = { type: 'meter'; peak: number; busyMs: number } | { type: 'recorded'; from: number; samples: Float32Array }
+
+let onRecorded: ((m: { from: number; samples: Float32Array }) => void) | null = null
+
+const ECHO_WINDOW_S = 5
+const ECHO_ROUNDS = 3
+
+/** Plays a chirp from the phone and finds it in the mic input, three times: the median round trip (output frame →
+ *  input frame) is kept for this phone and taken off every anchor. Needs the mic on (Mic test running). */
+export async function runEchoTest(): Promise<void> {
+  if (!ctx || !node || useListen.getState().echo.status === 'running') return
+  const sr = ctx.sampleRate
+  const probe = chirp(sr)
+  const buf = ctx.createBuffer(1, probe.length, sr)
+  buf.getChannelData(0).set(probe)
+  const rounds: Array<number | null> = []
+  const peaks: number[] = []
+  useListen.setState({ echo: { status: 'running', rounds: [] } })
+  for (let r = 0; r < ECHO_ROUNDS; r++) {
+    const c = ctx
+    const n = node
+    if (!c || !n) break
+    const start = c.currentTime + 0.3
+    const from = Math.round(start * sr)
+    const got = new Promise<Float32Array | null>((resolve) => {
+      const timer = window.setTimeout(() => resolve(null), (ECHO_WINDOW_S + 2) * 1000)
+      onRecorded = (m) => {
+        window.clearTimeout(timer)
+        resolve(m.from === from ? m.samples : null)
+      }
+    })
+    n.port.postMessage({ type: 'record', from, length: Math.round(ECHO_WINDOW_S * sr) })
+    const src = c.createBufferSource()
+    src.buffer = buf
+    const gain = c.createGain()
+    gain.gain.value = 0.9
+    src.connect(gain).connect(c.destination)
+    src.start(start)
+    const rec = await got
+    onRecorded = null
+    const e = rec ? findEcho(rec, probe, sr) : null
+    rounds.push(e ? Math.round((e.lag / sr) * 10000) / 10 : null)
+    if (e) peaks.push(Math.round(e.peak * 100) / 100)
+    useListen.setState({ echo: { status: 'running', rounds: [...rounds] } })
+  }
+  const found = rounds.filter((x): x is number => x !== null).sort((a, b) => a - b)
+  const ok = found.length >= 2 && found[found.length - 1]! - found[0]! <= 20
+  const median = found[found.length >> 1] ?? null
+  if (ok) setMicRoundTrip(median)
+  log('info', 'listen.echo', { rounds: JSON.stringify(rounds), peaks: JSON.stringify(peaks), ok, roundTripMs: ok ? median : null })
+  const message =
+    found.length < 2 ? 'no clear echo: turn the phone volume up and keep the room quiet' : 'the rounds disagree: try again in a quiet room'
+  useListen.setState({ echo: { status: ok ? 'done' : 'failed', rounds, ...(ok ? {} : { message }) } })
+}
+
+/** Forgets the stored round trip (anchors fall back to the played time). */
+export function clearEcho(): void {
+  setMicRoundTrip(null)
+  useListen.setState({ echo: { status: 'idle', rounds: [] } })
 }

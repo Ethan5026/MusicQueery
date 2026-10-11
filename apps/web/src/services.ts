@@ -360,11 +360,20 @@ export async function restoreSession(): Promise<void> {
 }
 
 let wakeOn = false
+/** Other reasons to keep the screen on (M7: listening, which iOS stops when the screen locks). */
+const wakeHolds = new Set<string>()
 function updateWake(): void {
-  const want = activeTransport().clock.playing
+  const want = activeTransport().clock.playing || wakeHolds.size > 0
   if (want === wakeOn) return
   wakeOn = want
   void (want ? wakeLock.enable() : wakeLock.disable())
+}
+
+/** Keeps the screen on for `reason` (or lets it go), whatever the clocks are doing. */
+export function holdWake(reason: string, on: boolean): void {
+  if (on) wakeHolds.add(reason)
+  else wakeHolds.delete(reason)
+  updateWake()
 }
 
 manual.onJump((e) => {

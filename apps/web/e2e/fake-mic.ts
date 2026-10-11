@@ -3,9 +3,11 @@
 // AudioWorkletNode that, once the listener hands it the decoder Worker's port, streams a synthesised
 // C – Am – F – G loop (4 beats each at 100 BPM, harmonic tones over a bass note, a kick on every beat) in real time.
 // The real decoder Worker runs on it; what the iPhone's mic hears over speakers is the SP7 test's job.
+// For the echo test the worklet answers a record request with quiet noise and the chirp ECHO_MS in.
 export const FAKE_MIC = () => {
   const SR = 22050
   const BPM = 100
+  const ECHO_MS = 120
   const CHORDS = [
     [48, 60, 64, 67],
     [45, 57, 60, 64],
@@ -38,6 +40,13 @@ export const FAKE_MIC = () => {
     createMediaStreamSource() {
       return node()
     }
+    createBuffer(_ch: number, n: number) {
+      const data = new Float32Array(n)
+      return { getChannelData: () => data }
+    }
+    createBufferSource() {
+      return { ...node(), buffer: null, start() {} }
+    }
     getOutputTimestamp() {
       return { contextTime: now(), performanceTime: performance.now() }
     }
@@ -46,8 +55,9 @@ export const FAKE_MIC = () => {
   class FakeWorkletNode {
     port = {
       onmessage: null as ((e: MessageEvent) => void) | null,
-      postMessage: (msg: { port?: MessagePort }) => {
+      postMessage: (msg: { port?: MessagePort; type?: string; from?: number; length?: number }) => {
         if (msg.port) feed(msg.port, this.port)
+        if (msg.type === 'record') setTimeout(() => this.port.onmessage?.({ data: echo(msg.from!, msg.length!) } as MessageEvent), 150)
       },
     }
     connect(n: unknown) {
@@ -56,6 +66,20 @@ export const FAKE_MIC = () => {
     disconnect() {
       stopped = true
     }
+  }
+
+  /** The app's chirp (1–4 kHz over 30 ms, Hann-tapered) heard ECHO_MS after it was played, over quiet noise. */
+  function echo(from: number, length: number) {
+    const samples = new Float32Array(length)
+    for (let i = 0; i < length; i++) samples[i] = (Math.random() - 0.5) * 0.02
+    const n = Math.round(SR * 0.03)
+    const at = Math.round((ECHO_MS / 1000) * SR)
+    for (let i = 0; i < n; i++) {
+      const t = i / SR
+      const x = Math.sin(2 * Math.PI * (1000 * t + (3000 * t * t) / (2 * (n / SR)))) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)))
+      samples[at + i]! += 0.3 * x
+    }
+    return { type: 'recorded', from, samples }
   }
 
   let stopped = false

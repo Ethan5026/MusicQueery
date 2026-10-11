@@ -4,6 +4,7 @@
 //   pnpm --filter @mq/listen score-live [--api https://…/api]
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { bestShift } from '../src/offset'
 import { scoreBeats, type Span } from '../src/score'
 
 const REPO = join(import.meta.dirname, '..', '..', '..')
@@ -43,15 +44,13 @@ for (const f of readdirSync(TRUTH).filter((x) => x.endsWith('.timeline.json'))) 
   for (const cs of parts) {
     if (cs.length < 3) continue
     const s0 = at(cs, 0)
-    let best = { shift: 0, majmin: s0.majmin, sevenths: s0.sevenths }
-    for (let sh = -5000; sh <= 5000; sh += 50) {
-      const s = at(cs, sh)
-      if (s.majmin > best.majmin) best = { shift: sh, majmin: s.majmin, sevenths: s.sevenths }
-    }
+    const b = bestShift(tl.chords, tl.beats, cs)
+    const best = { shift: b?.shiftMs ?? 0, ...at(cs, b?.shiftMs ?? 0) }
     const span = `${(cs[0]!.startMs / 1000).toFixed(0)}–${(cs[cs.length - 1]!.endMs / 1000).toFixed(0)} s`
     console.log(
       `  ${span.padEnd(11)} ${String(s0.beats).padStart(3)} beats · as saved majmin ${pct(s0.majmin)} · ` +
-        `best shift ${best.shift} ms → majmin ${pct(best.majmin)} sevenths ${pct(best.sevenths)}`,
+        `best shift ${best.shift} ms → majmin ${pct(best.majmin)} sevenths ${pct(best.sevenths)}` +
+        (b ? ` (next best ${pct(b.runnerUp)})` : ''),
     )
   }
 }
