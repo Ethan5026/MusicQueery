@@ -30,7 +30,25 @@ export function SettingsTab() {
           />
         </div>
         <div className="setrow">
-          <span className="lbl">Scale lens</span>
+          <span className="lbl">Play suggestions</span>
+          <Seg
+            name="set-mode"
+            label="Play suggestions"
+            value={s.mode}
+            options={[
+              ['simple', 'Simple'],
+              ['integrated', 'Integrated'],
+              ['advanced', 'Advanced'],
+            ]}
+            onChange={(mode) => s.set({ mode })}
+          />
+          <p className="set-hint">
+            Simple: the scale of the key you’re in. Integrated: that scale, plus warnings for chords outside the key
+            and key changes. Advanced: a scale for every chord.
+          </p>
+        </div>
+        <div className="setrow">
+          <span className="lbl">Scale lens (Advanced)</span>
           <Seg
             name="set-lens"
             label="Scale lens"

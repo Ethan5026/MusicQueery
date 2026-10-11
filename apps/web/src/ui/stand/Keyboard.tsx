@@ -1,7 +1,8 @@
-// Two-octave keyboard (the sketch's kb()): tinted keys are the scale, dots are chord tones, steel dots the guide tones.
+// Two-octave keyboard (the sketch's kb()): tinted keys are the scale; dots mark the highlighted notes (chord tones
+// or the pentatonic), steel dots the guide tones, rust dots the changed notes. Labels: chord slot or key degree.
 import { note, pc } from '@mq/theory'
 import { memo, type ReactNode } from 'react'
-import type { Tone } from './Staff'
+import type { PlayNote } from './play'
 
 const NAT = [0, 2, 4, 5, 7, 9, 11]
 const BLACK: Array<[number, number]> = [
@@ -12,17 +13,17 @@ const BLACK: Array<[number, number]> = [
   [5, 10],
 ]
 
-export const Keyboard = memo(function Keyboard({ scale, tones, w, h }: { scale: string[]; tones: Tone[]; w: number; h: number }) {
+export const Keyboard = memo(function Keyboard({ notes, w, h }: { notes: PlayNote[]; w: number; h: number }) {
   const ww = w / 14
   const bw = ww * 0.62
   const bh = h * 0.6
-  const inScale = new Set(scale.map((n) => pc(note(n))))
-  const label: Record<number, string> = {}
-  for (const t of tones) label[pc(note(t.name))] ??= t.slot
+  const inScale = new Set(notes.map((n) => pc(note(n.name))))
+  const label: Record<number, [string, string]> = {}
+  for (const n of notes) if (n.role && n.label) label[pc(note(n.name))] ??= [n.label, n.role]
   const out: ReactNode[] = []
   let k = 0
-  const dot = (cx: number, cy: number, r: number, lab: string) => {
-    out.push(<circle key={k++} className={`kdot${lab === '3' || lab === '7' ? ' g' : ''}`} cx={cx} cy={cy} r={r} />)
+  const dot = (cx: number, cy: number, r: number, [lab, role]: [string, string]) => {
+    out.push(<circle key={k++} className={`kdot ${role}`} cx={cx} cy={cy} r={r} />)
     out.push(
       <text key={k++} className="ktx" x={cx} y={cy} fontSize={(r * 1.15).toFixed(1)}>
         {lab}
@@ -43,7 +44,7 @@ export const Keyboard = memo(function Keyboard({ scale, tones, w, h }: { scale: 
       if (label[p]) dot(x + bw / 2, bh - bw * 0.62, bw * 0.38, label[p])
     }
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label="Keyboard: tinted keys are the scale, dots are chord tones">
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`Keyboard: ${notes.map((n) => n.name).join(' ')}`}>
       {out}
     </svg>
   )

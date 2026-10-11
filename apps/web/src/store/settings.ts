@@ -2,6 +2,7 @@
 // Kept in IndexedDB; loaded before the first render so the theme never flashes.
 import type { InstrumentId, Lens } from '@mq/theory'
 import { create } from 'zustand'
+import type { PlayMode } from '../ui/stand/play'
 import { idbGet, idbSet } from './idb'
 
 export type NotesView = 'staff' | 'keys'
@@ -13,9 +14,11 @@ export interface Settings {
   lens: Lens
   notes: NotesView
   theme: Theme
+  /** Play card: key-centre scale (simple), plus callouts (integrated), or chord-scales (advanced) */
+  mode: PlayMode
 }
 
-export const DEFAULT_SETTINGS: Settings = { instrument: 'concert', lens: 'inside', notes: 'staff', theme: 'stage' }
+export const DEFAULT_SETTINGS: Settings = { instrument: 'concert', lens: 'inside', notes: 'staff', theme: 'stage', mode: 'integrated' }
 
 interface SettingsState extends Settings {
   set: (patch: Partial<Settings>) => void
@@ -25,9 +28,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
   ...DEFAULT_SETTINGS,
   set: (patch) => {
     set(patch)
-    const { instrument, lens, notes, theme } = get()
+    const { instrument, lens, notes, theme, mode } = get()
     applyTheme(theme)
-    void idbSet('settings', 'prefs', { instrument, lens, notes, theme })
+    void idbSet('settings', 'prefs', { instrument, lens, notes, theme, mode })
   },
 }))
 

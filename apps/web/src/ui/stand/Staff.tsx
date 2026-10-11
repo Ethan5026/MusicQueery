@@ -1,8 +1,9 @@
 // Treble staff (D-11), ported from the sketch's staffSVG(): the chord stacked as whole notes, a barline, then
 // the scale ascending through the octave with names underneath. Every accidental written; no key signature.
-// Brass = chord tones, steel = guide tones (3rd and 7th).
-import { type Slot, note, pc } from '@mq/theory'
+// Note colours come from the Play mode (play.ts): brass, steel (guide tones), rust (changed notes).
+import type { Slot } from '@mq/theory'
 import { memo, type ReactNode } from 'react'
+import type { PlayNote } from './play'
 
 export interface Tone {
   name: string
@@ -11,12 +12,6 @@ export interface Tone {
 
 const LET = 'CDEFGAB'
 const dbl = (s: string): string => s.replace(/♯♯/g, '𝄪').replace(/♭♭/g, '𝄫')
-const pcOf = (n: string): number => pc(note(n))
-
-export function roleOf(tones: Tone[], n: string): '' | 't' | 'g' {
-  const t = tones.find((x) => pcOf(x.name) === pcOf(n))
-  return !t ? '' : t.slot === '3' || t.slot === '7' ? 'g' : 't'
-}
 
 interface Placed {
   n: string
@@ -37,8 +32,9 @@ function place(ns: string[], strict: boolean): Placed[] {
 }
 
 interface Props {
-  scale: string[]
-  tones: Tone[]
+  /** stacked before the barline; null for a scale alone */
+  chord: Tone[] | null
+  notes: PlayNote[]
   /** staff space in px */
   s: number
   /** gap between scale notes */
@@ -47,7 +43,7 @@ interface Props {
   names: boolean
 }
 
-export const Staff = memo(function Staff({ scale, tones, s, g, octave, names }: Props) {
+export const Staff = memo(function Staff({ chord, notes, s, g, octave, names }: Props) {
   const half = s / 2
   const botY = 6 * s + 4
   const h = botY + 2 * s + (names ? s * 2.2 : 4)
@@ -75,7 +71,7 @@ export const Staff = memo(function Staff({ scale, tones, s, g, octave, names }: 
   // the chord, stacked
   const clefW = s * 3.3
   const cp = place(
-    tones.map((t) => t.name),
+    (chord ?? []).map((t) => t.name),
     true,
   )
   const cx = clefW + 2 * acW + rx + 6
@@ -94,16 +90,20 @@ export const Staff = memo(function Staff({ scale, tones, s, g, octave, names }: 
       <ellipse key={k++} className="wh-in" cx={cx} cy={y} rx={rx * 0.5} ry={ry * 0.72} transform={`rotate(55 ${cx} ${y})`} />,
     )
   }
-  const bx = cx + rx * 1.2 + 8
+  const bx = chord ? cx + rx * 1.2 + 8 : clefW - acW
 
   // the scale
-  const sc = place(octave && scale.length ? [...scale, scale[0]!] : scale, false)
+  const seq = octave && notes.length ? [...notes, notes[0]!] : notes
+  const sc = place(
+    seq.map((n) => n.name),
+    false,
+  )
   const sx = bx + acW + rx + 6
   const last: Record<number, string> = {}
   sc.forEach((c, i) => {
     const x = sx + i * g
     const y = Y(c.p)
-    const r = roleOf(tones, c.n)
+    const r = seq[i]!.role
     const a = !c.a && last[c.p] ? '♮' : c.a
     last[c.p] = c.a
     out.push(...ledgers(x, c.p, rx))
@@ -120,7 +120,7 @@ export const Staff = memo(function Staff({ scale, tones, s, g, octave, names }: 
   const w = Math.ceil(ex + 3)
   const vbar = (x: number, cls: string) => <line className={cls} x1={x} x2={x} y1={botY - 4 * s} y2={botY} />
   return (
-    <svg viewBox={`0 0 ${w} ${h.toFixed(1)}`} width={w} height={h.toFixed(1)} role="img" aria-label={`Treble staff: chord ${tones.map((t) => t.name).join(' ')}, then scale ${scale.join(' ')}`}>
+    <svg viewBox={`0 0 ${w} ${h.toFixed(1)}`} width={w} height={h.toFixed(1)} role="img" aria-label={`Treble staff: ${chord ? `chord ${chord.map((t) => t.name).join(' ')}, then ` : ''}scale ${notes.map((n) => n.name).join(' ')}`}>
       {[0, 1, 2, 3, 4].map((i) => (
         <line key={`l${i}`} className="st-line" x1={1} x2={ex} y1={botY - i * s} y2={botY - i * s} />
       ))}
@@ -128,7 +128,7 @@ export const Staff = memo(function Staff({ scale, tones, s, g, octave, names }: 
         𝄞
       </text>
       {out}
-      {vbar(bx, 'st-bar')}
+      {chord && vbar(bx, 'st-bar')}
       {vbar(ex - 4, 'st-bar')}
       {vbar(ex, 'st-end')}
     </svg>

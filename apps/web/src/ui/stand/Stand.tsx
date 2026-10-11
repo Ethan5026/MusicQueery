@@ -10,6 +10,7 @@ import { type Settings, useSettings } from '../../store/settings'
 import type { TrackMeta } from '../../timeline/library'
 import { Acc, ChordSym, Seg, SourceBadge, SyncBadge } from '../atoms'
 import { Keyboard } from './Keyboard'
+import { type PlayView, playView } from './play'
 import { Staff } from './Staff'
 import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from './view'
 
@@ -118,8 +119,7 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
       ? m.scales.inside
       : m.scales.colour
     : null
-  const tones = m.tones
-  const scaleNotes = m.scale?.notes ?? []
+  const view = playView(m, settings.mode)
   const nextInst = INSTRUMENT_IDS[(INSTRUMENT_IDS.indexOf(inst) + 1) % INSTRUMENT_IDS.length]!
 
   return (
@@ -295,7 +295,18 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
 
       <section className="card scale" aria-label="Play">
         <div className="scale-top">
-          <span className="lbl">Play</span>
+          <Seg
+            mini
+            name="pmode"
+            label="Suggestions"
+            value={settings.mode}
+            options={[
+              ['simple', 'Simple'],
+              ['integrated', 'Integrated'],
+              ['advanced', 'Advanced'],
+            ]}
+            onChange={(mode) => setSettings({ mode })}
+          />
           <Seg
             mini
             name="nview"
@@ -308,13 +319,13 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
             onChange={(notes) => setSettings({ notes })}
           />
         </div>
-        {m.scale ? (
+        {view ? (
           <>
             <div className="scale-h">
               <b>
-                <Acc text={`${m.scale.root} ${m.scale.name}`} />
+                <Acc text={view.title} />
               </b>
-              {alt && alt.id !== m.scale.id && (
+              {settings.mode === 'advanced' && m.scale && alt && alt.id !== m.scale.id && (
                 <span>
                   or <Acc text={`${alt.root} ${alt.name}`} />
                 </span>
@@ -330,14 +341,14 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
             </div>
             {settings.notes === 'staff' ? (
               <div className="staffbox">
-                <Staff scale={scaleNotes} tones={tones} s={7.5} g={27} octave names />
+                <Staff chord={view.chord} notes={view.notes} s={7.5} g={view.chord ? 27 : 37} octave names />
               </div>
             ) : (
               <div className="kb">
-                <Keyboard scale={scaleNotes} tones={tones} w={372} h={76} />
+                <Keyboard notes={view.notes} w={372} h={76} />
               </div>
             )}
-            <Guide m={m} />
+            <Footer m={m} view={view} />
           </>
         ) : (
           <p className="scale-none">No chord sounding.</p>
@@ -345,6 +356,56 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
       </section>
     </div>
   )
+}
+
+/** The line under the staff: a callout when Integrated has one, else the pentatonic, guide tones or chord tones. */
+function Footer({ m, view }: { m: Moment; view: PlayView }) {
+  const c = view.callout
+  if (c)
+    return (
+      <div className={`gt callout ${c.kind}`} data-testid="callout">
+        {c.kind === 'keychange' ? (
+          <>
+            <span className="lbl">Key change</span>
+            <span>
+              <Acc text={c.lead} />
+            </span>
+            {c.changed.length > 0 && <span>· new:</span>}
+          </>
+        ) : (
+          <span>
+            <Acc text={c.lead} />
+          </span>
+        )}
+        {c.changed.map((n) => (
+          <b key={n} className="x">
+            <Acc text={n} />
+          </b>
+        ))}
+        {c.kind === 'outside' && (
+          <span>
+            over <ChordSym chord={m.chord} style={{ fontSize: 17 }} />
+          </span>
+        )}
+      </div>
+    )
+  if (view.footer === 'pentatonic')
+    return (
+      <div className="gt">
+        <span className="lbl">
+          <Acc text={view.sub} />
+        </span>
+        {view.notes
+          .filter((n) => n.role === 't')
+          .map((n) => (
+            <b key={n.name} className="t">
+              <Acc text={n.name} />
+            </b>
+          ))}
+      </div>
+    )
+  if (view.footer === 'none') return null
+  return <Guide m={m} />
 }
 
 /** How the 3rd and 7th move into the next chord; for triads (most pop), the chord tones instead. */

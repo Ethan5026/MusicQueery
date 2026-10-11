@@ -41,6 +41,27 @@ test('boots into Stand on the demo chart with five tabs', async ({ page }) => {
   await expect(page.locator('.kc .big')).toContainText('E♭ major')
   await expect(page.locator('.scale-h b')).toHaveText('C major')
   await expect(page.locator('.staffbox svg')).toBeVisible()
+  // Integrated (the default) announces the move to E♭ two bars ahead
+  await expect(page.getByTestId('callout')).toContainText('E♭ major in 7 beats')
+})
+
+test('Simple, Integrated and Advanced change the Play card', async ({ page }) => {
+  await page.goto('/')
+  await expect(hero(page)).toHaveText('B♭m7')
+  await seek(page, Math.round((((4 + 36 + 6) * 4 + 1.05) * 60000) / 168))
+  await expect(hero(page)).toHaveText('Cmaj7')
+  await page.locator('label[for="pmode-simple"]').click()
+  await expect(page.locator('.scale-h b')).toHaveText('C major')
+  await expect(page.getByTestId('callout')).toHaveCount(0)
+  await expect(page.locator('.gt')).toContainText('C major pentatonic')
+  await page.locator('label[for="pmode-advanced"]').click()
+  await expect(page.locator('.gt')).toContainText('Guide tones into')
+  // the chord-scale for C7♯5 (bar 24) differs from the key centre
+  await seek(page, Math.round((((4 + 36 + 23) * 4 + 1.05) * 60000) / 168))
+  await expect(hero(page)).toHaveText('C7♯5')
+  await expect(page.locator('.scale-h b')).not.toHaveText(/major$/)
+  await page.reload()
+  await expect(page.locator('#pmode-advanced')).toBeChecked()
 })
 
 test('play runs the manual clock; pause holds it', async ({ page }) => {
@@ -80,6 +101,8 @@ test('opens an analysed pop timeline from the store', async ({ page }) => {
   await expect(hero(page)).toHaveText('C')
   await expect(page.locator('.hero-fn')).toHaveText('I in C')
   await expect(page.locator('.kc .big')).toHaveText('None ahead')
+  await expect(page.locator('.gt')).toContainText('C major pentatonic')
+  await page.locator('label[for="pmode-advanced"]').click()
   await expect(page.locator('.gt')).toContainText('Chord tones')
 })
 
