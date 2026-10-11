@@ -11,6 +11,8 @@ run_worker_first = ["/api/*"]
 
 [vars]
 ALLOWED_ORIGINS = "https://musicqueery.ethangruening.workers.dev,http://127.0.0.1:5173"
+# Spotify users whose phones may queue an analysis (POST /api/queue/:id, M5).
+ALLOWED_SPOTIFY_USERS = "ethan_gruening"
 
 # Remote device logs are console.log'd: `pnpm --filter @mq/worker tail` live, Workers Logs for 3 days.
 [observability]

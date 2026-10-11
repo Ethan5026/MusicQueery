@@ -93,6 +93,8 @@ export class SpotifyClock implements Clock {
   readonly samples: PlayerSample[] = []
   last: PlayerSample | null = null
   lastError: unknown = null
+  /** performance time of the last answered poll (not a 429). */
+  lastOkAt: number | null = null
 
   private readonly opt: Required<Omit<SpotifyClockOptions, 'onError'>> & Pick<SpotifyClockOptions, 'onError'>
   private seg: Segment | null = null
@@ -137,6 +139,21 @@ export class SpotifyClock implements Clock {
   /** Start bias applied right now (ms). */
   get biasMs(): number {
     return this.seg?.playing ? this.seg.bias : 0
+  }
+
+  /** For the sync badge: age of the current segment, its playing samples, and an error estimate in ms
+   *  (half the best round trip plus the spread of the origins). Null when nothing is playing. */
+  quality(at = this.opt.now()): { sinceMs: number; samples: number; errMs: number } | null {
+    const s = this.seg
+    if (!s) return null
+    const n = s.origins.length
+    let errMs = Infinity
+    if (n) {
+      const minRtt = Math.min(...s.origins.map((o) => o.rtt))
+      const dev = s.origins.map((o) => Math.abs(o.origin - s.origin)).sort((a, b) => a - b)
+      errMs = minRtt / 2 + (dev[dev.length >> 1] ?? 0)
+    }
+    return { sinceMs: at - s.startedAt, samples: n, errMs }
   }
 
   /** Position from Spotify's report and the start bias, before the device offset. */
@@ -220,6 +237,7 @@ export class SpotifyClock implements Clock {
     this.samples.push(sample)
     if (this.samples.length > 4000) this.samples.splice(0, 1000)
     this.last = sample
+    if (sample.status !== 429) this.lastOkAt = sample.t1
     for (const cb of this.sampleSubs) cb(sample)
 
     const tMid = (sample.t0 + sample.t1) / 2

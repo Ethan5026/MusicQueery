@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import worker, { type Env, corsHeaders, isAuthorised } from './index'
 
 const allowed = 'https://musicqueery.ethangruening.workers.dev,http://127.0.0.1:5173'
@@ -145,4 +145,63 @@ test('the companion can log with the secret instead of an Origin', async () => {
   const body = { session: 'companion', lines: [{ msg: 'hi' }] }
   expect((await call(env, 'POST', '/api/log', { body })).status).toBe(403)
   expect((await call(env, 'POST', '/api/log', { body, auth: SECRET })).status).toBe(204)
+})
+
+// ---------------------------------------------------------------- analysis queue (M5)
+
+const ORIGIN = 'https://musicqueery.ethangruening.workers.dev'
+const QID = 'spotify:track:7iN1s7xHE4ifF5povM6A48'
+
+function phone(env: Env, method: string, token: string | null, body?: unknown) {
+  const headers: Record<string, string> = { Origin: ORIGIN }
+  if (token) headers['X-Spotify-Token'] = token
+  return worker.fetch(
+    new Request(`https://x.test/api/queue/${QID}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }),
+    env,
+  )
+}
+
+/** Spotify /v1/me: token "good" is the allow-listed user, "other" is someone else, anything else is invalid. */
+function mockSpotify() {
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    const auth = new Headers(init.headers).get('Authorization')
+    if (auth === 'Bearer good') return new Response(JSON.stringify({ id: 'ethan_gruening' }))
+    if (auth === 'Bearer other') return new Response(JSON.stringify({ id: 'someone' }))
+    return new Response('{}', { status: 401 })
+  })
+}
+
+test('the phone queues a track with an allow-listed Spotify token; others are refused', async () => {
+  mockSpotify()
+  const env = { ...makeEnv(), ALLOWED_SPOTIFY_USERS: 'ethan_gruening' }
+  expect((await phone(env, 'POST', null)).status).toBe(401)
+  expect((await phone(env, 'POST', 'bad')).status).toBe(401)
+  expect((await phone(env, 'POST', 'other')).status).toBe(401)
+  expect((await phone(env, 'GET', null)).status).toBe(404)
+  const r = await phone(env, 'POST', 'good', { title: 'Let It Be', artist: 'The Beatles' })
+  expect(r.status).toBe(201)
+  expect(await r.json()).toMatchObject({ id: QID, state: 'queued', title: 'Let It Be' })
+  // status is public, like timelines
+  expect(await (await phone(env, 'GET', null)).json()).toMatchObject({ state: 'queued' })
+  // a second request keeps its place
+  expect((await phone(env, 'POST', 'good', {})).status).toBe(200)
+  vi.unstubAllGlobals()
+})
+
+test('the companion lists, marks and finishes requests; uploading the timeline clears it', async () => {
+  mockSpotify()
+  const env = { ...makeEnv(), ALLOWED_SPOTIFY_USERS: 'ethan_gruening' }
+  await phone(env, 'POST', 'good', { title: 'Let It Be' })
+  expect((await call(env, 'GET', '/api/queue')).status).toBe(401)
+  const list = (await (await call(env, 'GET', '/api/queue', { auth: SECRET })).json()) as { queue: { id: string }[] }
+  expect(list.queue.map((q) => q.id)).toEqual([QID])
+  expect((await call(env, 'PUT', `/api/queue/${QID}`, { body: { state: 'working' } })).status).toBe(401)
+  const failed = await call(env, 'PUT', `/api/queue/${QID}`, { body: { state: 'failed', error: 'capture failed' }, auth: SECRET })
+  expect(await failed.json()).toMatchObject({ state: 'failed', error: 'capture failed' })
+  // asking again from the phone retries it
+  expect(await (await phone(env, 'POST', 'good', {})).json()).toMatchObject({ state: 'queued' })
+  expect((await call(env, 'PUT', `/api/timelines/${QID}`, { body: timeline(QID), auth: SECRET })).status).toBe(200)
+  expect(await (await phone(env, 'GET', null)).json()).toEqual({ id: QID, state: 'done' })
+  expect(await (await phone(env, 'POST', 'good', {})).json()).toEqual({ id: QID, state: 'done' })
+  vi.unstubAllGlobals()
 })

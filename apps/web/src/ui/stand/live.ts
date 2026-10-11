@@ -1,0 +1,114 @@
+// Hooks that tie the Stand screens to the active clock (D-16): the moment, a per-frame bus for things that move
+// every frame (progress bar, playhead), the sync badge state, and the phone's orientation.
+import type { Timeline } from '@mq/model'
+import { type Moment, analyseTimeline, moment } from '@mq/theory'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { create } from 'zustand'
+import { type SyncState, sameSync, syncState } from '../../clock/sync'
+import { perf } from '../../perf'
+import { clock, manual, transportFor, useApp, useSession } from '../../services'
+import type { Settings } from '../../store/settings'
+
+/** Per-frame listeners: position and duration in ms. Registered by refs, so React stays out of it (D-44). */
+export const frameBus = new Set<(pos: number, dur: number) => void>()
+
+/** theory.moment() at the active clock, recomputed when the beat or the chord changes. */
+export function useMoment(tl: Timeline | null, s: Settings): Moment | null {
+  const [m, setM] = useState<Moment | null>(null)
+  const driver = useSession((x) => x.driver)
+  const { instrument, lens } = s
+  useEffect(() => {
+    if (!tl) return
+    const t = transportFor(driver)
+    const a = analyseTimeline(tl)
+    const ev = a.events
+    let raf = 0
+    let last = ''
+    const frame = () => {
+      t.tick()
+      const pos = t.clock.positionMs()
+      const dur = t.durationMs() || tl.durationMs
+      for (const f of frameBus) f(pos, dur)
+      let i = -1
+      for (let lo = 0, hi = ev.length - 1; lo <= hi; ) {
+        const mid = (lo + hi) >> 1
+        if (ev[mid]!.startMs <= pos) {
+          i = mid
+          lo = mid + 1
+        } else hi = mid - 1
+      }
+      const key = `${Math.floor(a.beatAt(pos) + 1e-6)}|${i}`
+      if (key !== last) {
+        last = key
+        const t0 = performance.now()
+        setM(moment(tl, pos, { instrument, lens }))
+        perf.work(performance.now() - t0)
+      }
+      if (t.clock.playing) raf = requestAnimationFrame(frame)
+    }
+    frame()
+    const off = t.clock.onJump(() => {
+      cancelAnimationFrame(raf)
+      last = ''
+      frame()
+    })
+    return () => {
+      cancelAnimationFrame(raf)
+      off()
+    }
+  }, [tl, instrument, lens, driver])
+  return tl ? m : null
+}
+
+function currentSync(driver: 'spotify' | 'manual', authed: boolean): SyncState {
+  if (driver === 'manual') return { kind: 'manual', playing: manual.playing }
+  return syncState({
+    authed,
+    now: performance.now(),
+    failing: clock.lastError !== null,
+    lastOkAt: clock.lastOkAt,
+    locked: clock.locked,
+    playing: clock.playing,
+    quality: clock.quality(),
+  })
+}
+
+/** The sync badge state, checked four times a second; re-renders only when it changes. */
+export function useSync(): SyncState {
+  const driver = useSession((x) => x.driver)
+  const authed = useApp((x) => x.authed)
+  const [st, setSt] = useState<SyncState>(() => currentSync(driver, authed))
+  useEffect(() => {
+    const check = () => {
+      const n = currentSync(driver, authed)
+      setSt((p) => (sameSync(p, n) ? p : n))
+    }
+    check()
+    const id = setInterval(check, 250)
+    const off1 = clock.onJump(check)
+    const off2 = manual.onJump(check)
+    return () => {
+      clearInterval(id)
+      off1()
+      off2()
+    }
+  }, [driver, authed])
+  return st
+}
+
+const LANDSCAPE = '(orientation: landscape) and (max-height: 560px)'
+
+const subscribeOrientation = (cb: () => void) => {
+  const mq = matchMedia(LANDSCAPE)
+  mq.addEventListener('change', cb)
+  return () => mq.removeEventListener('change', cb)
+}
+
+/** A phone held sideways: Stand becomes the lead sheet. */
+export const useLandscape = (): boolean => useSyncExternalStore(subscribeOrientation, () => matchMedia(LANDSCAPE).matches)
+
+/** Screen-level UI state that outlives a rotation. */
+export const useStandUi = create<{ calibrating: boolean; setCalibrating: (v: boolean) => void }>((set) => ({
+  calibrating: false,
+  setCalibrating: (calibrating) => set({ calibrating }),
+}))

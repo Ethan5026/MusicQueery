@@ -50,6 +50,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("names", nargs="*")
     s.add_argument("--recognisers", default="chordino,btc,madmom")
 
+    s = sub.add_parser("watch", help="analyse tracks queued from the phone, whenever Spotify is idle (M5)")
+    s.add_argument("--idle-minutes", type=float, default=10, help="nothing played on any device for this long")
+    s.add_argument("--interval", type=float, default=60, help="seconds between queue checks")
+    s.add_argument("--once", action="store_true", help="work through what can be done now, then exit")
+    sub.add_parser("queue", help="show the analysis queue")
+
     s = sub.add_parser("get", help="fetch a timeline from the store")
     s.add_argument("id")
     sub.add_parser("list", help="list timelines in the store")
@@ -193,6 +199,23 @@ def cmd_analyse(a) -> int:
             failed.append(tid)
     print(f"done: {len(ids) - len(failed)} ok, {len(failed)} failed {failed or ''}")
     return 1 if failed else 0
+
+
+def cmd_watch(a) -> int:
+    from .watch import watch
+
+    try:
+        return watch(a.idle_minutes, a.interval, a.once)
+    except KeyboardInterrupt:
+        return 0
+
+
+def cmd_queue(a) -> None:
+    from .store import Store
+
+    for q in Store().queue():
+        err = f" ({q['error']})" if q.get("error") else ""
+        print(f"{q['state']:8} {q['id']}  {q.get('title', '')} — {q.get('artist', '')}  asked {q['requestedAt']}{err}")
 
 
 def cmd_chart_index(a) -> None:

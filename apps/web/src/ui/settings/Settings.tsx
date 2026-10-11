@@ -1,10 +1,14 @@
 // Settings tab: what changes the chart (instrument, lens, Staff/Keys, theme), Spotify, storage, diagnostics.
 import { useEffect, useState } from 'react'
+import { clearOffset, listOffsets } from '../../clock/offsets'
 import { BUILD, isStandalone } from '../../config'
 import { perf } from '../../perf'
 import { idbDelete, idbKeys } from '../../store/idb'
+import { clock, useApp } from '../../services'
 import { useSettings } from '../../store/settings'
 import { Seg } from '../atoms'
+import { Calibrate } from '../stand/Calibrate'
+import { useStandUi, useSync } from '../stand/live'
 import { useSubscription } from '../hooks'
 import { AuthCard, DebugCard, NowCard, ProbeCard, WakeCard } from './Diagnostics'
 
@@ -92,6 +96,7 @@ export function SettingsTab() {
 
       <div className="diag">
         <AuthCard />
+        <SpeakersCard />
         <StorageCard />
         <section>
           <h2>Diagnostics</h2>
@@ -131,6 +136,52 @@ function PerfLine() {
       {Math.round(t.maxGapMs)} ms · longest update {t.maxWorkMs.toFixed(1)} ms{' '}
       <button onClick={() => perf.reset()}>Reset</button>
     </p>
+  )
+}
+
+/** Per-speaker offsets from calibration (the sync badge on Stand opens the same sheet). */
+function SpeakersCard() {
+  const authed = useApp((s) => s.authed)
+  const { calibrating, setCalibrating } = useStandUi()
+  useSync() // the current device, as Spotify reports it
+  const [, bump] = useState(0)
+  const list = listOffsets()
+  const current = clock.last?.deviceName
+  if (!authed) return null
+  return (
+    <section>
+      <h2>Speakers</h2>
+      <p className="hint">
+        Each Spotify device can run a little ahead of or behind the chart. Calibrate it once while an analysed track plays
+        on it.
+      </p>
+      {list.length > 0 && (
+        <table>
+          <tbody>
+            {list.map((d) => (
+              <tr key={d.id}>
+                <td>{d.name ?? d.id.slice(0, 8)}</td>
+                <td className="mono">{d.ms > 0 ? '+' : ''}{d.ms} ms</td>
+                <td>
+                  <button
+                    onClick={() => {
+                      clearOffset(d.id)
+                      bump((n) => n + 1)
+                    }}
+                  >
+                    Reset
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <button onClick={() => setCalibrating(true)} disabled={!clock.last?.deviceId}>
+        {current ? `Calibrate ${current}` : 'Calibrate (play something first)'}
+      </button>
+      {calibrating && <Calibrate />}
+    </section>
   )
 }
 

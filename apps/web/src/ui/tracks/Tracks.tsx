@@ -7,6 +7,7 @@ import { useSession } from '../../services'
 import { idbGet } from '../../store/idb'
 import { useSettings } from '../../store/settings'
 import { DEMO_ID, type TrackMeta, demoTimeline, parseTrackRef, recordedList } from '../../timeline/library'
+import { AnalyseButton } from '../AnalyseButton'
 import { Acc } from '../atoms'
 import { homeKey } from '../stand/view'
 
@@ -24,6 +25,7 @@ export function TracksTab() {
   const [ref, setRef] = useState('')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
+  const [missing, setMissing] = useState<string | null>(null)
 
   const refresh = () =>
     void recordedList().then(async (list) =>
@@ -41,15 +43,17 @@ export function TracksTab() {
   const go = async (id: string) => {
     setBusy(id)
     setMsg('')
+    setMissing(null)
     const r = await open(id)
     setBusy(null)
+    if (r.status === 'missing' && id.startsWith('spotify:track:')) setMissing(id)
     if (r.status === 'ok') {
       refresh()
       setTab('stand')
     } else
       setMsg(
         r.status === 'missing'
-          ? 'That track hasn’t been analysed yet. Run the companion on the PC first.'
+          ? 'That track hasn’t been analysed yet.'
           : `Couldn’t open it: ${r.message}`,
       )
   }
@@ -58,8 +62,8 @@ export function TracksTab() {
     <div className="page">
       <h1 className="page-h">Tracks</h1>
       <p className="tnote">
-        Recorded timelines play on the app’s own clock. Use the play button and the slider on Stand. Backing tracks come
-        later.
+        Play anything on Spotify and Stand follows it. Recorded timelines here also play on the app’s own clock, with the
+        play button and the slider on Stand. Backing tracks come later.
       </p>
       <div className="tlist" role="list">
         {rows?.map((r) => {
@@ -120,6 +124,7 @@ export function TracksTab() {
         </div>
       </form>
       {msg && <p className="tmsg">{msg}</p>}
+      {missing && <AnalyseButton id={missing} />}
     </div>
   )
 }

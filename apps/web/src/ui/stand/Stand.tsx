@@ -1,15 +1,20 @@
-// Stand (portrait): the sketch's main screen, read top to bottom in order of urgency. Everything comes from
-// theory.moment() on the open timeline at the clock's position (D-16). React re-renders once per beat or
-// chord change; the progress bar moves every frame through refs.
+// Stand: the sketch's main screen. Portrait reads top to bottom in order of urgency; held sideways it becomes the
+// lead sheet (LeadSheet.tsx). Everything comes from theory.moment() on the open timeline at the active clock's
+// position (D-16): Spotify when it plays something, else the app's own clock. React re-renders once per beat or
+// chord change; the progress bar and playhead move every frame through refs (D-44).
 import type { Timeline } from '@mq/model'
-import { type Moment, type MomentKey, INSTRUMENT_IDS, analyseTimeline, moment } from '@mq/theory'
-import { useEffect, useMemo, useState } from 'react'
-import { perf } from '../../perf'
-import { manual, useSession } from '../../services'
+import { type Moment, type MomentKey, INSTRUMENT_IDS, analyseTimeline } from '@mq/theory'
+import { useEffect, useMemo, useRef } from 'react'
+import { activeTransport, clock, retryFollow, useApp, useSession } from '../../services'
+import { login } from '../../spotify/auth'
 import { type Settings, useSettings } from '../../store/settings'
 import type { TrackMeta } from '../../timeline/library'
+import { AnalyseButton } from '../AnalyseButton'
 import { Acc, ChordSym, Seg, SourceBadge, SyncBadge } from '../atoms'
+import { Calibrate } from './Calibrate'
 import { Keyboard } from './Keyboard'
+import { LeadSheet } from './LeadSheet'
+import { frameBus, useLandscape, useMoment, useStandUi, useSync } from './live'
 import { type PlayView, playView } from './play'
 import { Staff } from './Staff'
 import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from './view'
@@ -17,73 +22,30 @@ import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from
 const INSTRUMENT_SHORT = { concert: 'Concert', alto: 'E♭ alto', tenor: 'B♭ tenor' } as const
 
 export function Stand() {
-  const { timeline, meta, status } = useSession()
+  const { timeline, meta, status, driver } = useSession()
   const settings = useSettings()
   const m = useMoment(timeline, settings)
-  if (!timeline || !meta || !m)
-    return <div className="stand-empty">{status === 'loading' ? 'Opening…' : 'Pick a track in Tracks.'}</div>
-  return <StandView tl={timeline} meta={meta} m={m} settings={settings} />
+  const land = useLandscape()
+  const calibrating = useStandUi((s) => s.calibrating)
+  let body
+  if (timeline && meta && m)
+    body = land ? (
+      <LeadSheet tl={timeline} meta={meta} m={m} settings={settings} />
+    ) : (
+      <StandView tl={timeline} meta={meta} m={m} settings={settings} />
+    )
+  else if (driver === 'spotify' && meta) body = <NotAnalysed meta={meta} status={status} />
+  else if (status === 'loading') body = <div className="stand-empty">Opening…</div>
+  else body = <NothingPlaying />
+  return (
+    <>
+      {body}
+      {calibrating && <Calibrate />}
+    </>
+  )
 }
 
-/** theory.moment() at the clock, recomputed when the beat or the chord changes. */
-function useMoment(tl: Timeline | null, s: Settings): Moment | null {
-  const [m, setM] = useState<Moment | null>(null)
-  const { instrument, lens } = s
-  useEffect(() => {
-    if (!tl) return
-    const a = analyseTimeline(tl)
-    const ev = a.events
-    let raf = 0
-    let last = ''
-    const frame = () => {
-      manual.checkEnd()
-      const pos = manual.positionMs()
-      progress.update(pos, tl.durationMs)
-      let i = -1
-      for (let lo = 0, hi = ev.length - 1; lo <= hi; ) {
-        const mid = (lo + hi) >> 1
-        if (ev[mid]!.startMs <= pos) {
-          i = mid
-          lo = mid + 1
-        } else hi = mid - 1
-      }
-      const key = `${Math.floor(a.beatAt(pos) + 1e-6)}|${i}`
-      if (key !== last) {
-        last = key
-        const t0 = performance.now()
-        setM(moment(tl, pos, { instrument, lens }))
-        perf.work(performance.now() - t0)
-      }
-      if (manual.playing) raf = requestAnimationFrame(frame)
-    }
-    frame()
-    const off = manual.onJump(() => {
-      cancelAnimationFrame(raf)
-      last = ''
-      frame()
-    })
-    return () => {
-      cancelAnimationFrame(raf)
-      off()
-    }
-  }, [tl, instrument, lens])
-  return m
-}
-
-/** The progress row registers its DOM nodes here; the frame loop writes to them directly. */
-const progress = {
-  fill: null as HTMLElement | null,
-  time: null as HTMLElement | null,
-  range: null as HTMLInputElement | null,
-  dragging: false,
-  update(pos: number, dur: number) {
-    if (this.fill) this.fill.style.width = `${dur ? ((pos / dur) * 100).toFixed(2) : 0}%`
-    if (this.time) this.time.textContent = fmt(pos)
-    if (this.range && !this.dragging) this.range.value = String(Math.round(pos))
-  },
-}
-
-const fmt = (ms: number): string => {
+export const fmt = (ms: number): string => {
   const s = Math.max(0, Math.floor(ms / 1000))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
@@ -95,6 +57,177 @@ function monogram(title: string): string {
   return (words.length > 1 ? words.map((w) => w[0]).join('') : title.slice(0, 4)).slice(0, 5).toUpperCase()
 }
 
+export function PlayIcon({ playing }: { playing: boolean }) {
+  return playing ? (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="3" y="2" width="3.5" height="12" rx="1" />
+      <rect x="9.5" y="2" width="3.5" height="12" rx="1" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4 2.2v11.6c0 .6.6.9 1.1.6l9-5.8c.5-.3.5-.9 0-1.2l-9-5.8C4.6 1.3 4 1.6 4 2.2z" />
+    </svg>
+  )
+}
+
+/** The sync badge, wired: tap to calibrate this speaker (Spotify) or to log in (not connected). */
+export function LiveSyncBadge() {
+  const st = useSync()
+  const driver = useSession((s) => s.driver)
+  const setCalibrating = useStandUi((s) => s.setCalibrating)
+  if (st.kind === 'offline')
+    return <SyncBadge state={st} title="Log in to Spotify" onClick={() => void login().catch(() => {})} />
+  if (driver === 'spotify' && st.kind !== 'idle')
+    return <SyncBadge state={st} title="Calibrate this speaker" onClick={() => setCalibrating(true)} />
+  return <SyncBadge state={st} />
+}
+
+/** "Artist · on Living Room TV" when following Spotify, "Recorded · manual clock" otherwise. */
+function subtitle(meta: TrackMeta, driver: 'spotify' | 'manual'): string {
+  const where =
+    driver === 'spotify' ? (clock.last?.deviceName ? `on ${clock.last.deviceName}` : 'Spotify') : 'Recorded · manual clock'
+  return meta.artist ? `${meta.artist} · ${where}` : where
+}
+
+/** Header: the art tile is play/pause on the active transport (the app's clock, or Spotify on any device). */
+function NowPlaying({ meta }: { meta: TrackMeta }) {
+  const driver = useSession((s) => s.driver)
+  useSync() // re-render on play/pause and device changes
+  const t = activeTransport()
+  const playing = t.clock.playing
+  return (
+    <header className="np">
+      <button
+        type="button"
+        className="art playbtn"
+        aria-label={playing ? 'Pause' : 'Play'}
+        aria-pressed={playing}
+        title={meta.title}
+        onClick={() => t.toggle()}
+      >
+        <PlayIcon playing={playing} />
+        <span className="mono-gram">{monogram(meta.title)}</span>
+      </button>
+      <div style={{ minWidth: 0 }}>
+        <div className="np-title">{meta.title}</div>
+        <div className="np-sub">{subtitle(meta, driver)}</div>
+      </div>
+      <LiveSyncBadge />
+    </header>
+  )
+}
+
+function Progress({ durationMs, positionMs }: { durationMs: number; positionMs: number }) {
+  const fill = useRef<HTMLElement>(null)
+  const time = useRef<HTMLSpanElement>(null)
+  const range = useRef<HTMLInputElement>(null)
+  const dragging = useRef(false)
+  const driver = useSession((s) => s.driver)
+  useEffect(() => {
+    const f = (pos: number, dur: number) => {
+      if (fill.current) fill.current.style.width = `${dur ? Math.min(100, (pos / dur) * 100).toFixed(2) : 0}%`
+      if (time.current) time.current.textContent = fmt(pos)
+      if (range.current && !dragging.current) range.current.value = String(Math.round(pos))
+    }
+    frameBus.add(f)
+    // Spotify gets one seek when the thumb is let go (the native change event, not React's per-move onChange).
+    const el = range.current
+    const release = () => {
+      if (el && useSession.getState().driver === 'spotify') activeTransport().seek(Number(el.value))
+    }
+    el?.addEventListener('change', release)
+    return () => {
+      frameBus.delete(f)
+      el?.removeEventListener('change', release)
+    }
+  }, [])
+  return (
+    <div className="prog">
+      <span className="mono" ref={time}>
+        {fmt(positionMs)}
+      </span>
+      <div className="pbar">
+        <i ref={fill} />
+        <input
+          type="range"
+          aria-label="Song position"
+          min={0}
+          max={Math.round(durationMs)}
+          step={100}
+          defaultValue={Math.round(positionMs)}
+          ref={range}
+          onPointerDown={() => (dragging.current = true)}
+          onPointerUp={() => (dragging.current = false)}
+          onPointerCancel={() => (dragging.current = false)}
+          // The manual clock follows the thumb.
+          onInput={(e) => {
+            if (driver === 'manual') activeTransport().seek(Number(e.currentTarget.value))
+          }}
+        />
+      </div>
+      <span className="mono">{fmt(durationMs)}</span>
+    </div>
+  )
+}
+
+/** Following a Spotify track that has no analysed timeline yet. */
+function NotAnalysed({ meta, status }: { meta: TrackMeta; status: string }) {
+  const error = useSession((s) => s.error)
+  const sid = meta.id.replace('spotify:track:', '')
+  return (
+    <div className="stand">
+      <NowPlaying meta={meta} />
+      <div className="empty wait" data-testid="not-analysed">
+        {status === 'loading' ? (
+          <p>Looking for this recording’s chords…</p>
+        ) : (
+          <>
+            <span className="ch">
+              <span className="r">?</span>
+            </span>
+            <p>
+              {status === 'error'
+                ? `Couldn’t fetch the chords (${error}).`
+                : 'No chords for this recording yet. It needs analysing on the PC first.'}
+            </p>
+            {status === 'missing' && (
+              <AnalyseButton id={meta.id} title={meta.title} {...(meta.artist ? { artist: meta.artist } : {})} onDone={retryFollow} />
+            )}
+            <button type="button" className="btn" onClick={retryFollow}>
+              Check again
+            </button>
+            <code className="tnote">or on the PC: pnpm companion analyse {sid}</code>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The sketch's "Nothing playing" state. */
+function NothingPlaying() {
+  const authed = useApp((s) => s.authed)
+  const setTab = useSession((s) => s.setTab)
+  return (
+    <div className="stand stand-wait">
+      <div className="empty" data-testid="nothing-playing">
+        <span className="ch">
+          <span className="r">N.C.</span>
+        </span>
+        <p>Play something on Spotify, on this phone or any speaker, and the chart picks it up within a second.</p>
+        {!authed && (
+          <button type="button" className="btn primary" onClick={() => void login().catch(() => {})}>
+            Log in with Spotify
+          </button>
+        )}
+        <button type="button" className="btn" onClick={() => setTab('tracks')}>
+          Open a recorded track
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m: Moment; settings: Settings }) {
   const setSettings = useSettings((s) => s.set)
   const inst = settings.instrument
@@ -102,7 +235,6 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
   const bpm = tempoAt(tl, m.positionMs)
   const section = sectionLabel(tl, m.barIndex)
   const barPos = barPosition(tl, m.barIndex)
-  const playing = manual.playing
 
   const kc = m.keyChange
   const kcBar = useMemo(() => {
@@ -124,67 +256,8 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
 
   return (
     <div className="stand">
-      <header className="np">
-        <button
-          type="button"
-          className="art playbtn"
-          aria-label={playing ? 'Pause' : 'Play'}
-          aria-pressed={playing}
-          title={meta.title}
-          onClick={() => manual.toggle()}
-        >
-          {playing ? (
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <rect x="3" y="2" width="3.5" height="12" rx="1" />
-              <rect x="9.5" y="2" width="3.5" height="12" rx="1" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4 2.2v11.6c0 .6.6.9 1.1.6l9-5.8c.5-.3.5-.9 0-1.2l-9-5.8C4.6 1.3 4 1.6 4 2.2z" />
-            </svg>
-          )}
-          <span className="mono-gram">{monogram(meta.title)}</span>
-        </button>
-        <div style={{ minWidth: 0 }}>
-          <div className="np-title">{meta.title}</div>
-          <div className="np-sub">{meta.artist ? `${meta.artist} · ` : ''}Recorded · manual clock</div>
-        </div>
-        <SyncBadge state={{ kind: playing ? 'manual' : 'paused' }} />
-      </header>
-
-      <div className="prog">
-        <span
-          className="mono"
-          ref={(el) => {
-            progress.time = el
-          }}
-        >
-          {fmt(m.positionMs)}
-        </span>
-        <div className="pbar">
-          <i
-            ref={(el) => {
-              progress.fill = el
-            }}
-          />
-          <input
-            type="range"
-            aria-label="Song position"
-            min={0}
-            max={Math.round(tl.durationMs)}
-            step={100}
-            defaultValue={Math.round(m.positionMs)}
-            ref={(el) => {
-              progress.range = el
-            }}
-            onPointerDown={() => (progress.dragging = true)}
-            onPointerUp={() => (progress.dragging = false)}
-            onPointerCancel={() => (progress.dragging = false)}
-            onInput={(e) => manual.seek(Number(e.currentTarget.value))}
-          />
-        </div>
-        <span className="mono">{fmt(tl.durationMs)}</span>
-      </div>
+      <NowPlaying meta={meta} />
+      <Progress durationMs={tl.durationMs} positionMs={m.positionMs} />
 
       <div className="chips">
         {home && (

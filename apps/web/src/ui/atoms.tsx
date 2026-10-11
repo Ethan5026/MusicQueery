@@ -2,6 +2,7 @@
 import type { TimelineSource } from '@mq/model'
 import type { MomentChord } from '@mq/theory'
 import type { CSSProperties } from 'react'
+import type { SyncState } from '../clock/sync'
 
 const dbl = (s: string): string => s.replace(/♯♯/g, '𝄪').replace(/♭♭/g, '𝄫')
 
@@ -57,24 +58,41 @@ export function SourceBadge({ source }: { source: TimelineSource }) {
   return <span className={`src ${cls}`}>{text}</span>
 }
 
-export type SyncState = { kind: 'locked'; ms: number } | { kind: 'resync' } | { kind: 'paused' } | { kind: 'offline' } | { kind: 'manual' }
+export type { SyncState }
 
-/** How closely the dashboard follows the playhead. M4 only has the manual clock. */
-export function SyncBadge({ state }: { state: SyncState }) {
-  const [cls, text] =
-    state.kind === 'locked'
-      ? ['ok', `±${Math.round(state.ms)} ms`]
-      : state.kind === 'resync'
-        ? ['warn', 'Re-syncing']
-        : state.kind === 'paused'
-          ? ['idle', 'Paused']
-          : state.kind === 'offline'
-            ? ['alert', 'Not connected']
-            : ['idle', 'Manual']
-  return (
-    <span className={`sync ${cls}`}>
+const SYNC_LABEL = (st: SyncState): [string, string] => {
+  switch (st.kind) {
+    case 'locked':
+      return ['ok', `±${Math.round(st.ms)} ms`]
+    case 'resync':
+      return ['warn', 'Re-syncing']
+    case 'paused':
+      return ['idle', 'Paused']
+    case 'idle':
+      return ['idle', 'Not playing']
+    case 'offline':
+      return ['alert', 'Not connected']
+    case 'manual':
+      return ['idle', st.playing ? 'Manual' : 'Paused']
+  }
+}
+
+/** How closely the dashboard follows the playhead (sketch: the four sync states). Tappable when `onClick` is set. */
+export function SyncBadge({ state, onClick, title }: { state: SyncState; onClick?: () => void; title?: string }) {
+  const [cls, text] = SYNC_LABEL(state)
+  const body = (
+    <>
       <i />
       {text}
+    </>
+  )
+  return onClick ? (
+    <button type="button" data-testid="sync" className={`sync ${cls} tap`} onClick={onClick} title={title} aria-label={title ? `${text}. ${title}` : text}>
+      {body}
+    </button>
+  ) : (
+    <span className={`sync ${cls}`} data-testid="sync">
+      {body}
     </span>
   )
 }

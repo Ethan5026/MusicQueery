@@ -1,6 +1,8 @@
 // MusicQueery Worker (D-23): serves the PWA from static assets and the API under /api/*.
 // M1: remote device logs (/api/log) and drift-probe reports (/api/report).
 // M3: the timeline store (D-17, D-32). GET /api/timelines/:id is public; writes need `Authorization: Bearer <API_SECRET>`.
+// M5: the analysis queue. The phone asks for a track to be analysed (POST /api/queue/:id with its Spotify token, checked
+// against ALLOWED_SPOTIFY_USERS); the companion's `mqc watch` lists, updates and deletes requests with the secret.
 
 import { Timeline } from '@mq/model'
 
@@ -10,6 +12,8 @@ export interface Env {
   ALLOWED_ORIGINS: string
   /** `wrangler secret put API_SECRET`; locally from apps/worker/.dev.vars. */
   API_SECRET?: string
+  /** Spotify user ids (comma-separated) whose phones may queue analyses. */
+  ALLOWED_SPOTIFY_USERS?: string
 }
 
 const MAX_LOG_BYTES = 64 * 1024
@@ -18,6 +22,33 @@ const MAX_TIMELINE_BYTES = 4 * 1024 * 1024
 const TIMELINE_PREFIX = 'tl:'
 /** `spotify:track:<base62>` or `chart:<slug>`, the same ids Timeline.id allows. */
 const TIMELINE_ID = /^(?:spotify:track:[A-Za-z0-9]{22}|chart:[A-Za-z0-9._~-]{1,110})$/
+const QUEUE_PREFIX = 'q:'
+const QUEUE_ID = /^spotify:track:[A-Za-z0-9]{22}$/
+const MAX_QUEUE = 200
+
+export type QueueState = 'queued' | 'working' | 'failed'
+
+export interface QueueItem {
+  id: string
+  title?: string
+  artist?: string
+  state: QueueState
+  error?: string
+  requestedAt: string
+  updatedAt: string
+}
+
+/** The Spotify user behind `token`, if they are on the allow-list. */
+export async function spotifyUser(token: string | null, allowed: string | undefined): Promise<string | null> {
+  const list = (allowed ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (!token || !list.length) return null
+  const res = await fetch('https://api.spotify.com/v1/me', { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return null
+  const me = (await res.json()) as { id?: string }
+  return me.id && list.includes(me.id) ? me.id : null
+}
+
+const clip = (v: unknown, n = 200): string | undefined => (typeof v === 'string' && v ? v.slice(0, n) : undefined)
 
 export interface TimelineMeta {
   source: string
@@ -36,7 +67,7 @@ export function corsHeaders(origin: string | null, allowed: string): Record<stri
     ? {
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Spotify-Token',
         'Access-Control-Max-Age': '86400',
         Vary: 'Origin',
       }
@@ -95,6 +126,92 @@ export default {
       return json({ key }, 201)
     }
 
+    if (url.pathname === '/api/queue') {
+      if (req.method !== 'GET') return reply('method', 405)
+      if (!authorised) return reply('unauthorised', 401)
+      const items: QueueItem[] = []
+      const page = await env.STORE.list({ prefix: QUEUE_PREFIX })
+      for (const k of page.keys) {
+        const v = await env.STORE.get(k.name)
+        if (v) items.push(JSON.parse(v) as QueueItem)
+      }
+      items.sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
+      return json({ queue: items })
+    }
+
+    if (url.pathname.startsWith('/api/queue/')) {
+      const id = decodeURIComponent(url.pathname.slice('/api/queue/'.length))
+      if (!QUEUE_ID.test(id)) return reply('bad id', 400)
+      const key = QUEUE_PREFIX + id
+      const now = new Date().toISOString()
+      const current = async () => {
+        const v = await env.STORE.get(key)
+        return v ? (JSON.parse(v) as QueueItem) : null
+      }
+
+      if (req.method === 'GET') {
+        const item = await current()
+        if (item) return json(item)
+        const done = (await env.STORE.get(TIMELINE_PREFIX + id)) !== null
+        return done ? json({ id, state: 'done' }) : reply('not queued', 404)
+      }
+
+      if (req.method === 'POST') {
+        // The phone has no store secret (D-32): it proves who it is with its Spotify token.
+        if (!authorised && !(await spotifyUser(req.headers.get('X-Spotify-Token'), env.ALLOWED_SPOTIFY_USERS)))
+          return reply('unauthorised', 401)
+        if ((await env.STORE.get(TIMELINE_PREFIX + id)) !== null) return json({ id, state: 'done' })
+        const text = await readBody(req, 4096)
+        let body: Record<string, unknown>
+        try {
+          body = text ? (JSON.parse(text) as Record<string, unknown>) : {}
+        } catch {
+          return reply('bad json', 400)
+        }
+        const prev = await current()
+        if (!prev && (await env.STORE.list({ prefix: QUEUE_PREFIX })).keys.length >= MAX_QUEUE) return reply('queue full', 429)
+        const title = clip(body.title) ?? prev?.title
+        const artist = clip(body.artist) ?? prev?.artist
+        const item: QueueItem = {
+          id,
+          ...(title ? { title } : {}),
+          ...(artist ? { artist } : {}),
+          // asking again retries a failed one; a running one carries on
+          state: prev?.state === 'working' ? 'working' : 'queued',
+          requestedAt: prev?.requestedAt ?? now,
+          updatedAt: now,
+        }
+        await env.STORE.put(key, JSON.stringify(item))
+        console.log(JSON.stringify({ queue: id, state: item.state }))
+        return json(item, prev ? 200 : 201)
+      }
+
+      if (!authorised) return reply('unauthorised', 401)
+      if (req.method === 'DELETE') {
+        await env.STORE.delete(key)
+        return reply(null, 204)
+      }
+      if (req.method === 'PUT') {
+        const prev = await current()
+        if (!prev) return reply('not queued', 404)
+        let body: Record<string, unknown>
+        try {
+          body = JSON.parse((await readBody(req, 4096)) ?? '') as Record<string, unknown>
+        } catch {
+          return reply('bad json', 400)
+        }
+        const state = body.state
+        if (state !== 'queued' && state !== 'working' && state !== 'failed') return reply('bad state', 400)
+        const error = state === 'failed' ? clip(body.error, 500) : undefined
+        const item: QueueItem = { ...prev, state, updatedAt: now }
+        if (error) item.error = error
+        else delete item.error
+        await env.STORE.put(key, JSON.stringify(item))
+        return json(item)
+      }
+      return reply('method', 405)
+    }
+
     if (url.pathname === '/api/timelines') {
       if (req.method !== 'GET') return reply('method', 405)
       if (!authorised) return reply('unauthorised', 401)
@@ -147,6 +264,7 @@ export default {
           bytes: text.length,
         }
         await env.STORE.put(key, text, { metadata: meta })
+        await env.STORE.delete(QUEUE_PREFIX + id) // a queued analysis is done
         console.log(JSON.stringify({ timeline: id, ...meta }))
         return json({ id, ...meta })
       }

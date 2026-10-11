@@ -57,6 +57,16 @@ export async function loadTimeline(id: string): Promise<LoadResult> {
   return { status: 'ok', timeline: r.timeline, from: 'store' }
 }
 
+/** Fetches `id` from the store; if it differs from `cached` (re-analysed on the PC), caches and returns it. */
+export async function revalidate(id: string, cached: Timeline): Promise<Timeline | null> {
+  const r = await fetchTimelineById(id)
+  if (r.status !== 'ok') return null
+  const t = r.timeline
+  if (t.createdAt === cached.createdAt && t.chords.length === cached.chords.length && t.generator === cached.generator) return null
+  await idbSet('timelines', id, t)
+  return t
+}
+
 /** Title and artist: IndexedDB, then Spotify (when logged in), then the seeds, then the bare ID. */
 export async function trackMeta(id: string): Promise<TrackMeta> {
   const seed = SEEDS.find((s) => s.id === id)
