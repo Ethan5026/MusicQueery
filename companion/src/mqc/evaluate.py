@@ -81,6 +81,14 @@ def beat_f(truth: dict, est_beats_ms: list[float]) -> float:
     return round(float(mir_eval.beat.f_measure(ref, hyp)), 4)
 
 
+def beat_amlt(truth: dict, est_beats_ms: list[float]) -> float:
+    """Continuity at any metrical level (double/half tempo and off-beat accepted): beat_this may count a
+    65 bpm ballad in 8ths, which is musically fine."""
+    ref = mir_eval.beat.trim_beats(np.array(truth["beats"]) / 1000)
+    hyp = mir_eval.beat.trim_beats(np.array(est_beats_ms) / 1000)
+    return round(float(mir_eval.beat.continuity(ref, hyp)[3]), 4)
+
+
 def downbeat_f(truth: dict, est: dict) -> float:
     ref = np.array([b["startMs"] for b in truth["bars"]]) / 1000
     hyp = np.array([b["startMs"] for b in est["bars"]]) / 1000

@@ -139,7 +139,10 @@ class Spotify:
                 self._tok["expires_at"] = 0
                 continue
             if r.status_code == 429 or r.status_code >= 500:
-                time.sleep(float(r.headers.get("Retry-After", 1 + attempt)))
+                wait = float(r.headers.get("Retry-After", 1 + attempt))
+                if wait > 30:  # a long cooldown would silently stall an unattended run
+                    raise SpotifyError(f"{method} {path}: rate limited for {wait:.0f} s")
+                time.sleep(wait)
                 continue
             return r
         return r

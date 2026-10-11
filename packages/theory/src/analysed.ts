@@ -123,9 +123,14 @@ export interface FinishedAnalysis {
 
 /**
  * Recogniser chords → canonical Timeline chords and key regions: parses, merges repeats, finds keys by
- * detectKeys over the chord sequence (weighted by beats), then respells every root in its key.
+ * detectKeys over the chord sequence (weighted by beats), then respells every root in its key. With `sevenths`,
+ * triads become the seventh chords a lead sheet would write in that key (`leadSheetSeventh`).
  */
-export function finishAnalysis(raw: RawChord[], beatsMs: number[], opts: { harte?: boolean } = {}): FinishedAnalysis {
+export function finishAnalysis(
+  raw: RawChord[],
+  beatsMs: number[],
+  opts: { harte?: boolean; sevenths?: boolean } = {},
+): FinishedAnalysis {
   const unparsed: string[] = []
   type Item = { startMs: number; endMs: number; chord: ChordSymbol; confidence?: number }
   const items: Item[] = []
@@ -169,7 +174,9 @@ export function finishAnalysis(raw: RawChord[], beatsMs: number[], opts: { harte
   }
   const chords: Timeline['chords'] = items.map((it, i) => {
     const k = keyOfItem[i]
-    const c = k ? respellInKey(it.chord, { ...k, tonic: conventionalTonic(k) }) : it.chord
+    let c = it.chord
+    if (k && opts.sevenths && c.kind === 'chord') c = leadSheetSeventh(c, k, items[i + 1]?.chord ?? null)
+    c = k ? respellInKey(c, { ...k, tonic: conventionalTonic(k) }) : c
     return {
       startMs: round1(it.startMs),
       endMs: round1(it.endMs),
@@ -182,6 +189,33 @@ export function finishAnalysis(raw: RawChord[], beatsMs: number[], opts: { harte
     k.endMs = round1(k.endMs)
   }
   return { chords, keys, unparsed }
+}
+
+/**
+ * The seventh chord a jazz lead sheet would write for a recogniser's triad, from its function in `key`.
+ * Pop-trained recognisers drop 7ths that are rarely absent in jazz, and hear a 7♯9 as m7.
+ *  - major triad: maj7 on I and IV (♭III and ♭VI in minor), dominant 7 elsewhere (V, secondary dominants, ♭VII)
+ *  - minor triad: m7; but on v of a minor key resolving to i it is V7 (also when the recogniser said m7)
+ *  - diminished triad: ø7 on ii of minor or vii of major, °7 elsewhere
+ * Chords that already have a 7th, 6th, sus or altered 5th are left alone (except the v → V7 case).
+ */
+export function leadSheetSeventh(c: Chord, key: Key, next: ChordSymbol | null): Chord {
+  const d = mod(pc(c.root) - pc(key.tonic), 12)
+  const resolvesToTonic = next?.kind === 'chord' && mod(pc(next.root) - pc(key.tonic), 12) === 0
+  const triad = c.seventh === 'none' && c.tensions.length === 0 && !c.alt
+  if (c.third === 'min' && c.fifth === 'p' && key.mode === 'minor' && d === 7 && resolvesToTonic && (triad || c.seventh === 'min'))
+    return { ...c, third: 'maj', seventh: 'min' }
+  if (!triad) return c
+  if (c.third === 'maj' && c.fifth === 'p') {
+    const tonicLike = key.mode === 'major' ? d === 0 || d === 5 : d === 3 || d === 8
+    return { ...c, seventh: tonicLike ? 'maj' : 'min' }
+  }
+  if (c.third === 'min' && c.fifth === 'p') return { ...c, seventh: 'min' }
+  if (c.third === 'min' && c.fifth === 'b') {
+    const half = (key.mode === 'minor' && d === 2) || (key.mode === 'major' && d === 11)
+    return { ...c, seventh: half ? 'min' : 'dim' }
+  }
+  return c
 }
 
 /** Key names as players write them: D♭ not C♯ major, F♯ minor not G♭ minor, G♭/F♯ major → G♭. */

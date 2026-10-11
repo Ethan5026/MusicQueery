@@ -156,3 +156,9 @@ describe.skipIf(lists.length === 0).each(lists)('corpus %s', (file) => {
     }
   })
 })
+
+test('a double barline `||` is not an empty bar; a bar of blanks continues the chord', () => {
+  // Pop 400's Imagine and Let It Be write verses as `…|lF   ||C  sC^,|…`
+  expect(bars(chartOf('[T44C   |F   ||C   |G   Z'))).toEqual(['C:4', 'F:4', 'C:4', 'G:4'])
+  expect(bars(chartOf('[T44C   |F   |    |G   Z'))).toEqual(['C:4', 'F:4', 'F:4', 'G:4'])
+})

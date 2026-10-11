@@ -36,8 +36,8 @@ def call(req: dict[str, Any]) -> Any:
     return out
 
 
-def finish(chords: list[dict], beats_ms: list[float], harte: bool = True) -> dict:
-    return call({"op": "finish", "chords": chords, "beats": beats_ms, "harte": harte})
+def finish(chords: list[dict], beats_ms: list[float], harte: bool = True, sevenths: bool = False) -> dict:
+    return call({"op": "finish", "chords": chords, "beats": beats_ms, "harte": harte, "sevenths": sevenths})
 
 
 def harte(symbols: list[str]) -> list[str | None]:

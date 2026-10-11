@@ -1,0 +1,29 @@
+{
+ "name": "fly-me-to-the-moon",
+ "trackId": "5b7OgznPJJr1vHNYGyvxau",
+ "title": "Fly Me To The Moon (In Other Words)",
+ "artist": "Frank Sinatra, Count Basie",
+ "durationMs": 147000,
+ "capture": {
+  "offsetMs": 546.0,
+  "offsetMadMs": 7.1,
+  "firstSoundMs": 1148.9569160997733,
+  "peak": 0.624
+ },
+ "chart": {
+  "playlist": "jazz1460",
+  "title": "Fly Me To The Moon"
+ },
+ "form": [
+  {
+   "chartBars": 28,
+   "atMs": 8520
+  },
+  {
+   "chartBars": 28,
+   "atMs": 72580
+  }
+ ],
+ "taps": [],
+ "formNote": "Sinatra/Basie 1964, in C like the chart. 4-bar intro; chorus 1 from 0:08.5 and chorus 2 from 1:12.6. Basie reharmonises the last 4 bars of each chorus and adds the A♭7-B♭7 ending, so only chart bars 1-28 of each chorus are scored."
+}

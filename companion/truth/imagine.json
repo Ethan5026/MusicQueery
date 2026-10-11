@@ -1,0 +1,25 @@
+{
+ "name": "imagine",
+ "trackId": "7pKfPomDEeI4TPT6EOYjn9",
+ "title": "Imagine - Remastered 2010",
+ "artist": "John Lennon",
+ "durationMs": 187866,
+ "capture": {
+  "offsetMs": 448.3,
+  "offsetMadMs": 7.9,
+  "firstSoundMs": 1581.7460317460318,
+  "peak": 0.748
+ },
+ "chart": {
+  "playlist": "pop400",
+  "title": "Imagine"
+ },
+ "form": [
+  {
+   "chart": 1,
+   "atMs": 1200
+  }
+ ],
+ "taps": [],
+ "formNote": "Remastered 2010 album version; iReal Pop 400 chart played once from the first downbeat (56 bars, matches the recording bar for bar once the `||` parser bug was fixed)."
+}

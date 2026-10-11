@@ -140,6 +140,25 @@ def find_pc_device(sp: Spotify, name: str = "") -> dict:
     raise CaptureError(f"no Spotify desktop device named {want!r}; devices: {[d['name'] for d in devs]}")
 
 
+def _start(sp: Spotify, track_id: str, device_id: str, log=print, timeout_s: float = 12) -> None:
+    """Sends play and waits until the player confirms this track is playing near its start. The desktop client
+    applies remote commands late and sometimes not at all (D-33), so the command is resent once."""
+    sp.play(track_id, device_id, 0)
+    t0 = time.time()
+    resent = False
+    while time.time() - t0 < timeout_s:
+        time.sleep(0.4)
+        st = sp.player()
+        if st and st.track_id == track_id and st.is_playing and st.progress_ms < 8000:
+            sp.set_repeat("off", device_id)
+            return
+        if not resent and time.time() - t0 > 4:
+            log(f"  player shows {st.track_id if st else None}, resending play")
+            sp.play(track_id, device_id, 0)
+            resent = True
+    raise CaptureError("Spotify did not start the track")
+
+
 def capture_track(
     sp: Spotify,
     track_id: str,
@@ -162,12 +181,10 @@ def capture_track(
     sp.pause(device["id"]) if device.get("is_active") else None
     time.sleep(0.5)
     rec = Recorder(spotify_root_pid(), wav)
-    started = next(e for e in rec.events if e["event"] == "started")
-    if "error" in started.get("event", ""):
-        raise CaptureError(str(started))
+    if rec.events[-1].get("event") == "error":
+        raise CaptureError(str(rec.events[-1]))
     try:
-        sp.play(track_id, device["id"], 0)
-        sp.set_repeat("off", device["id"])
+        _start(sp, track_id, device["id"], log)
         samples: list[PlayerState] = []
         paused_since: float | None = None
         t_end = time.time() + duration_ms / 1000 + 30
@@ -183,8 +200,6 @@ def capture_track(
             if st.track_id != track_id:
                 if samples and samples[-1].progress_ms > duration_ms - 5000:
                     break  # it ended and autoplay moved on
-                if not samples and time.time() < t_end - duration_ms / 1000:
-                    continue  # play request not applied yet
                 raise CaptureError(f"track changed to {st.track_id}")
             if not st.is_playing:
                 if samples and samples[-1].progress_ms > duration_ms - 3000:

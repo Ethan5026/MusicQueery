@@ -9,7 +9,9 @@ The same JSON then gets a `form` (written by hand) that says what is played over
     "chart": {"playlist": "jazz1460", "title": "Autumn Leaves", "transpose": "F"},
     "form": [{"bars": 4}, {"chart": 6}, {"bars": 2}]
 `{"bars": n}` is n bars nobody charted (excluded from scoring); `{"chart": k}` plays the expanded chart k times;
-`{"bars": n, "chords": ["Cm7", "F7", ...]}` gives one chord per bar. `mqc truth <name>` turns it into a
+`{"bars": n, "chords": ["Cm7", "F7 B♭7", ...]}` gives the chords of each bar (split evenly);
+`{"chartBars": n}` plays the first n bars of the chart once; any segment may carry `"atMs"` to start at the bar
+nearest that time (skipped bars are uncharted). `mqc truth <name>` turns it into a
 Timeline v1 (`source: exact`) in companion/truth/<name>.timeline.json.
 """
 
@@ -40,12 +42,12 @@ def audio_path(name: str) -> Path:
     return TRUTH_AUDIO / f"{name}.flac"
 
 
-def tap(sp: Spotify, track_id: str, name: str, device_name: str = "") -> dict:
+def tap(sp: Spotify, track_id: str, name: str, device_name: str = "", keys: bool = True) -> dict:
     """Plays and captures the track while recording taps. Returns the saved truth record."""
     taps: list[tuple[int, str]] = []
     stop = threading.Event()
 
-    def keys() -> None:
+    def read_keys() -> None:
         while not stop.is_set():
             if msvcrt.kbhit():
                 ch = msvcrt.getwch()
@@ -61,8 +63,8 @@ def tap(sp: Spotify, track_id: str, name: str, device_name: str = "") -> dict:
     meta = sp.track(track_id)
     print(f"{meta['name']} — {', '.join(a['name'] for a in meta['artists'])} ({meta['duration_ms'] / 60000:.1f} min)")
     print("ENTER on beat 1 of every bar, SPACE on the other beats. Starting playback on this PC...")
-    th = threading.Thread(target=keys, daemon=True)
-    th.start()
+    if keys:
+        threading.Thread(target=read_keys, daemon=True).start()
     try:
         cap = capture_track(sp, track_id, TRUTH_AUDIO, device_name)
     finally:
@@ -87,11 +89,12 @@ def tap(sp: Spotify, track_id: str, name: str, device_name: str = "") -> dict:
                 "firstSoundMs": cap.first_sound_ms,
                 "peak": round(cap.peak, 3),
             },
-            "taps": [{"ms": round(ms, 1), "key": k} for ms, k in tap_ms if ms >= 0],
+            **({"taps": [{"ms": round(ms, 1), "key": k} for ms, k in tap_ms if ms >= 0]} if keys else {}),
         }
     )
     rec.setdefault("chart", {"playlist": "jazz1460", "title": meta["name"]})
     rec.setdefault("form", [])
+    rec.setdefault("taps", [])
     save(rec)
     n_bar = sum(1 for _, k in tap_ms if k == "bar")
     print(f"saved {truth_path(name)}: {len(tap_ms)} taps ({n_bar} bars)")
@@ -132,12 +135,33 @@ def calibrate(tapped_ms: np.ndarray, detected_ms: np.ndarray, window: float = 15
     return float(np.median(d)) if len(d) else 0.0
 
 
-def build_truth(rec: dict, latency_ms: float) -> dict:
+def grid_from_madmom(audio: np.ndarray, sr: int, meter: int) -> tuple[np.ndarray, np.ndarray]:
+    """(beats_ms, downbeats_ms) from madmom's RNN + DBN downbeat tracker: a grid independent of beat_this,
+    used as truth when nobody tapped."""
+    from madmom.audio.signal import Signal
+    from madmom.features.downbeats import DBNDownBeatTrackingProcessor, RNNDownBeatProcessor
+
+    from .analysis import resample
+
+    act = RNNDownBeatProcessor()(Signal(resample(audio, sr, 44100), sample_rate=44100, num_channels=1))
+    mm = DBNDownBeatTrackingProcessor(beats_per_bar=[meter], fps=100)(act)
+    return mm[:, 0] * 1000, mm[mm[:, 1] == 1, 0] * 1000
+
+
+def chart_meter(rec: dict) -> int:
+    if not any("chart" in seg or "chartBars" in seg for seg in rec["form"]):
+        return 4
+    ch = rec["chart"]
+    path = ch["playlist"] if Path(ch["playlist"]).exists() else str(REPO / "packages" / "theory" / "corpus" / f"{ch['playlist']}.txt")
+    return bridge.call({"op": "chart", "playlist": path, "title": ch["title"]})["chart"]["meter"]["num"]
+
+
+def build_truth(rec: dict, latency_ms: float, grid: tuple[np.ndarray, np.ndarray] | None = None) -> dict:
     """Timeline v1 of what was played, from the tapped grid and the form. Uncharted bars get no chord (gaps
     are scored as excluded)."""
     played_chart = None
     meter = 4
-    if any("chart" in seg for seg in rec["form"]):
+    if any("chart" in seg or "chartBars" in seg for seg in rec["form"]):
         ch = rec["chart"]
         playlist = ch["playlist"]
         path = playlist if Path(playlist).exists() else str(REPO / "packages" / "theory" / "corpus" / f"{playlist}.txt")
@@ -151,7 +175,7 @@ def build_truth(rec: dict, latency_ms: float) -> dict:
         )
         played_chart = res["played"]
         meter = res["chart"]["meter"]["num"]
-    beats, bars = grid_from_taps(rec["taps"], meter, latency_ms)
+    beats, bars = grid if grid is not None else grid_from_taps(rec["taps"], meter, latency_ms)
     chords: list[dict] = []
     tl_bars: list[dict] = []
     bar_i = 0
@@ -168,9 +192,12 @@ def build_truth(rec: dict, latency_ms: float) -> dict:
             chords.append({"startMs": round(a, 1), "endMs": round(b, 1), "symbol": symbol})
 
     for seg in rec["form"]:
-        if "chart" in seg:
-            for p in range(seg["chart"]):
-                for pb in played_chart:
+        if "atMs" in seg:  # anchor: this segment starts at the bar nearest this time
+            bar_i = int(np.argmin(np.abs(bars - seg["atMs"])))
+        if "chart" in seg or "chartBars" in seg:
+            passes = [played_chart] * seg.get("chart", 0) or [played_chart[: seg["chartBars"]]]
+            for p, bars_of_pass in enumerate(passes):
+                for pb in bars_of_pass:
                     span = bar_span(bar_i)
                     if span is None:
                         break
@@ -197,7 +224,11 @@ def build_truth(rec: dict, latency_ms: float) -> dict:
                 if span is None:
                     break
                 if per_bar:
-                    put(per_bar[k], *span)
+                    a, b = span
+                    tl_bars.append({"startMs": round(a, 1), "number": k + 1})
+                    group = per_bar[k].split()
+                    for j, sym in enumerate(group):
+                        put(sym, a + (b - a) * j / len(group), a + (b - a) * (j + 1) / len(group))
                 bar_i += 1
     used = bar_i
     if used + 1 < len(bars):
@@ -210,7 +241,7 @@ def build_truth(rec: dict, latency_ms: float) -> dict:
         "source": "exact",
         "durationMs": rec["durationMs"],
         "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
-        "generator": f"mqc.truth (taps, latency {latency_ms:.0f} ms)",
+        "generator": f"mqc.truth (taps, latency {latency_ms:.0f} ms)" if grid is None else "mqc.truth (madmom grid)",
         "meter": {"num": meter, "den": 4},
         "beats": [round(float(b), 1) for b in beats],
         "bars": tl_bars,

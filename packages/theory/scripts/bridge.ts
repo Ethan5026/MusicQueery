@@ -1,7 +1,7 @@
 // JSON bridge from the Python companion (M3) into @mq/theory, so chord spelling, keys and charts come from one
 // implementation. Bundled by `pnpm --filter @mq/theory bridge` into dist/bridge.mjs (Node can't run the
 // extensionless TS imports directly). Reads one JSON request on stdin, writes one JSON reply on stdout:
-//   {op:'finish', chords:[{startMs,endMs,symbol,confidence?}], beats:[ms], harte?:bool} → FinishedAnalysis
+//   {op:'finish', chords:[{startMs,endMs,symbol,confidence?}], beats:[ms], harte?, sevenths?} → FinishedAnalysis
 //   {op:'harte', symbols:[...]}                → {harte:[...]}  (null where a symbol does not parse)
 //   {op:'chart', playlist:path, title, transpose?:tonic} → {chart, played:PlayedBar[], issues}
 //   {op:'titles', playlist:path}               → {titles:[...]}
@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 import { expandChart, finishAnalysis, importPlaylist, parseChord, toHarte, transposeChart } from '../src/index'
 
 type Req =
-  | { op: 'finish'; chords: Parameters<typeof finishAnalysis>[0]; beats: number[]; harte?: boolean }
+  | { op: 'finish'; chords: Parameters<typeof finishAnalysis>[0]; beats: number[]; harte?: boolean; sevenths?: boolean }
   | { op: 'harte'; symbols: string[] }
   | { op: 'chart'; playlist: string; title: string; transpose?: string }
   | { op: 'titles'; playlist: string }
@@ -25,7 +25,7 @@ const norm = (s: string): string =>
 function handle(req: Req): unknown {
   switch (req.op) {
     case 'finish':
-      return finishAnalysis(req.chords, req.beats, { harte: req.harte ?? false })
+      return finishAnalysis(req.chords, req.beats, { harte: req.harte ?? false, sevenths: req.sevenths ?? false })
     case 'harte':
       return {
         harte: req.symbols.map((s) => {

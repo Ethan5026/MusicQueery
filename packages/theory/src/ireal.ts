@@ -234,7 +234,8 @@ export function songToChart(song: IrealSong, playlist?: string): ImportResult {
         slots = pendingR
         simile = true
         pendingR = null
-      } else if (b.opened && closedByBarline && done.length) {
+      } else if (b.opened && closedByBarline && done.length && b.cells.length > 0) {
+        // a measure of blank cells continues the last chord; `||` (no cells at all) is just a double barline
         const prev = done[done.length - 1]!.chords
         slots = [{ symbol: prev[prev.length - 1]!.symbol, beats: beatsPerBar }]
       }

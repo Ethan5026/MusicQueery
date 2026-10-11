@@ -1,0 +1,14 @@
+{
+ "name": "your-song",
+ "trackId": "38zsOOcu31XbbYj9BIPUF1",
+ "title": "Your Song",
+ "artist": "Elton John",
+ "durationMs": 241786,
+ "chart": {
+  "playlist": "pop400",
+  "title": "Your song"
+ },
+ "form": [],
+ "taps": [],
+ "formNote": "Not used as truth: the recording phrases verses in 8.5 chart bars where the chart has 11 (held A-flat bars cut short), so a truth would have to be transcribed from the recognisers. Analysed only."
+}

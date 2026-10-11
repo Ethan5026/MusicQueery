@@ -6,6 +6,7 @@ import type { DriftPoint, Summary } from '../probe/analysis'
 import { DriftProbe } from '../probe/DriftProbe'
 import { clock, useApp } from '../services'
 import { player } from '../spotify/api'
+import { type TimelineResult, chordAt, fetchTimeline } from '../timeline/fetch'
 import { loadTokens, login, logout } from '../spotify/auth'
 import { wakeLock } from '../wakelock'
 import { fmtMs, fmtTime, useFrame, useSubscription } from './hooks'
@@ -21,6 +22,7 @@ export function App() {
       </header>
       <AuthCard />
       <NowCard />
+      <TimelineCard />
       <ProbeCard />
       <WakeCard />
       <DebugCard />
@@ -161,6 +163,65 @@ function NowCard() {
             Set offset for this device
           </button>
         </div>
+      )}
+    </section>
+  )
+}
+
+/** M3 check: the analysed timeline for the current track, straight from the Worker store. */
+function TimelineCard() {
+  const authed = useApp((s) => s.authed)
+  useSubscription(subscribeSamples)
+  const now = useFrame(authed)
+  const trackId = clock.last?.trackId ?? null
+  const [res, setRes] = useState<{ id: string; r: TimelineResult } | null>(null)
+  useEffect(() => {
+    if (!trackId) return
+    let live = true
+    void fetchTimeline(trackId).then((r) => {
+      if (!live) return
+      setRes({ id: trackId, r })
+      log('info', 'timeline.fetch', {
+        trackId,
+        status: r.status,
+        ...(r.status === 'ok' ? { chords: r.timeline.chords.length, bytes: r.bytes, ms: Math.round(r.ms) } : {}),
+        ...(r.status === 'error' ? { err: r.message } : {}),
+      })
+    })
+    return () => {
+      live = false
+    }
+  }, [trackId])
+  if (!authed || !trackId) return null
+  const r = res?.id === trackId ? res.r : null
+  const tl = r?.status === 'ok' ? r.timeline : null
+  const pos = clock.positionMs(now)
+  const cur = tl ? chordAt(tl, pos) : null
+  const next = tl && cur ? tl.chords[tl.chords.indexOf(cur) + 1] : null
+  return (
+    <section>
+      <h2>Timeline</h2>
+      {!r && <p className="dim">Fetching…</p>}
+      {r?.status === 'missing' && <p className="dim">Not analysed yet. Run the companion on the PC.</p>}
+      {r?.status === 'error' && <p className="warn">{r.message}</p>}
+      {tl && (
+        <>
+          <p className="track">
+            {cur?.symbol ?? '–'} <span className="dim">→ {next?.symbol ?? '–'}</span>
+          </p>
+          <dl className="kv">
+            <dt>source</dt>
+            <dd>
+              {tl.source} · {tl.generator}
+            </dd>
+            <dt>chords / beats</dt>
+            <dd>
+              {tl.chords.length} / {tl.beats.length}
+            </dd>
+            <dt>keys</dt>
+            <dd>{tl.keys.map((k) => `${k.tonic} ${k.mode}`).slice(0, 4).join(', ')}</dd>
+          </dl>
+        </>
       )}
     </section>
   )

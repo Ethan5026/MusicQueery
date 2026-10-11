@@ -47,9 +47,40 @@ def _beat_model():
     return Audio2Beats(checkpoint_path="final0", device="cpu", dbn=False)
 
 
-def track_beats(audio: np.ndarray, sr: int) -> Beats:
+def track_beats(audio: np.ndarray, sr: int, regular: bool = True) -> Beats:
     beats, downbeats = _beat_model()(audio, sr)
-    return Beats(np.asarray(beats, dtype=float), np.asarray(downbeats, dtype=float))
+    b = Beats(np.asarray(beats, dtype=float), np.asarray(downbeats, dtype=float))
+    return regularise(b) if regular else b
+
+
+def regularise(b: Beats, glitch: float = 0.6) -> Beats:
+    """One consistent beat level and no glitch bars. beat_this sometimes inserts a downbeat a fraction of a bar
+    after the last one, and on music felt in 2 (samba, bossa) flips between half and quarter notes from bar to
+    bar. Bars shorter than `glitch` × the median bar are merged into the bar before; then every bar of normal
+    length gets the most common beat count (the faster level when counts k and 2k both occur), evenly spaced."""
+    if len(b.downbeats) < 4:
+        return b
+    db = [float(b.downbeats[0])]
+    med = float(np.median(np.diff(b.downbeats)))
+    for t in b.downbeats[1:]:
+        if t - db[-1] >= glitch * med:
+            db.append(float(t))
+    dbs = np.array(db)
+    med = float(np.median(np.diff(dbs)))
+    edges = np.append(dbs, dbs[-1] + med)
+    counts = [int(((b.beats >= a - 0.03) & (b.beats < e - 0.03)).sum()) for a, e in zip(edges[:-1], edges[1:], strict=True)]
+    common = Counter(c for c in counts if 2 <= c <= 8)
+    n = common.most_common(1)[0][0] if common else 4
+    if any(c == 2 * n for c in common) and common[2 * n] >= 0.1 * len(counts):
+        n *= 2
+    out: list[float] = list(b.beats[b.beats < dbs[0] - 0.03])
+    for (a, e), c in zip(zip(edges[:-1], edges[1:], strict=True), counts, strict=True):
+        last = e > b.beats[-1] + 0.5 * med  # final bar: keep what was detected
+        if not last and 0.75 * med <= e - a <= 1.33 * med and c != n:
+            out += [a + (e - a) * k / n for k in range(n)]
+        else:
+            out += list(b.beats[(b.beats >= a - 0.03) & (b.beats < e - 0.03)])
+    return Beats(np.array(sorted(out)), dbs)
 
 
 def meter_of(b: Beats) -> int:
@@ -207,6 +238,75 @@ RECOGNISERS = {
     "madmom": chords_madmom,
 }
 
+VOTE_WEIGHTS = {"btc": 1.2, "chordino": 1.0, "madmom": 0.8}
+SEVENTH_QUALITIES = {"7", "maj7", "min7", "hdim7", "dim7", "min6", "maj6", "minmaj7"}
+JAZZ_SEVENTH_SHARE = 0.18  # SP4: BTC hears 7ths in 26-42% of jazz, 0.4-8% of pop (4 tracks; provisional)
+
+
+def seventh_share(segs: Segments) -> float:
+    """Share of the chorded time that a recogniser labelled with a 7th or 6th chord."""
+    total = sev = 0.0
+    for s, e, lab in segs:
+        if lab in ("N", "X"):
+            continue
+        q = lab.split(":")[1].split("/")[0].split("(")[0] if ":" in lab else "maj"
+        total += e - s
+        sev += (e - s) * (q in SEVENTH_QUALITIES)
+    return sev / total if total else 0.0
+
+
+def _root(label: str) -> int | str:
+    if label in ("N", "X"):
+        return "N"
+    import mir_eval
+
+    return int(mir_eval.chord.pitch_class_to_semitone(label.split(":")[0].split("/")[0]))
+
+
+def vote(per: dict[str, Segments], beats: np.ndarray, end_s: float, weights: dict[str, float] = VOTE_WEIGHTS) -> Segments:
+    """Per beat, the root most recognisers agree on (weighted); its label comes from the heaviest recogniser
+    that chose that root, so BTC's large vocabulary supplies the quality whenever it agrees."""
+    synced = {r: beat_sync(per[r], beats, end_s) for r in weights}
+    edges = np.concatenate([[0.0], beats, [end_s]]) if beats[0] > 0.05 else np.concatenate([beats, [end_s]])
+    idx = dict.fromkeys(weights, 0)
+    out: Segments = []
+    for a, b in zip(edges[:-1], edges[1:], strict=True):
+        m = (a + b) / 2
+        score: dict[int | str, float] = {}
+        best_label: dict[int | str, tuple[float, str]] = {}
+        for r, w in weights.items():
+            segs = synced[r]
+            while idx[r] < len(segs) and segs[idx[r]][1] <= m:
+                idx[r] += 1
+            lab = segs[idx[r]][2] if idx[r] < len(segs) and segs[idx[r]][0] <= m else "N"
+            key = _root(lab)
+            score[key] = score.get(key, 0.0) + w
+            if key not in best_label or w > best_label[key][0]:
+                best_label[key] = (w, lab)
+        win = max(score, key=lambda k: score[k])
+        out.append((float(a), float(b), best_label[win][1]))
+    return beat_sync(out, beats, end_s)
+
+
+@dataclass
+class Chords:
+    segs: Segments  # beat-synced
+    sevenths: bool  # apply lead-sheet sevenths (jazz detected)
+    share: float
+    name: str
+
+
+def recognise(audio: np.ndarray, sr: int, beats: Beats, recogniser: str = "auto") -> Chords:
+    """`auto`: 3-way vote, lead-sheet sevenths when BTC hears enough 7ths. Any single recogniser name: that one,
+    no sevenths."""
+    end = len(audio) / sr
+    if recogniser != "auto":
+        return Chords(beat_sync(RECOGNISERS[recogniser](audio, sr), beats.beats, end), False, 0.0, recogniser)
+    per = {r: RECOGNISERS[r](audio, sr) for r in VOTE_WEIGHTS}
+    share = seventh_share(per["btc"])
+    jazz = share >= JAZZ_SEVENTH_SHARE
+    return Chords(vote(per, beats.beats, end), jazz, share, "vote+7ths" if jazz else "vote")
+
 
 # ---------------------------------------------------------------- beat sync + timeline
 
@@ -270,13 +370,17 @@ def build_timeline(
     segs: Segments,
     generator: str,
     source: str = "analysed",
+    sevenths: bool = True,
+    sections: list[tuple[int, int, str]] | None = None,
 ) -> tuple[dict, list[str]]:
     """Timeline v1 dict (validate with `validate_timeline`) and the labels the bridge could not read."""
     beats_ms = [round(float(t) * 1000, 1) for t in beats.beats]
     raw = [{"startMs": round(s * 1000, 1), "endMs": round(e * 1000, 1), "symbol": lab} for s, e, lab in segs]
-    fin = bridge.finish(raw, beats_ms, harte=True)
+    fin = bridge.finish(raw, beats_ms, harte=True, sevenths=sevenths)
     num = meter_of(beats)
     bars = [{"startMs": round(float(t) * 1000, 1), "number": i + 1} for i, t in enumerate(beats.downbeats)]
+    if sections:
+        label_bars(bars, sections)
     chords = [c for c in fin["chords"] if c["startMs"] < duration_ms]
     for c in chords:
         c["endMs"] = min(c["endMs"], duration_ms)
@@ -328,3 +432,87 @@ def summary(tl: dict) -> str:
     bpm = statistics.median(t["bpm"] for t in tl["tempo"])
     keys = ", ".join(f"{k['tonic']} {k['mode']}" for k in tl["keys"][:6])
     return f"{len(tl['chords'])} chords, {len(tl['beats'])} beats, ~{bpm:.0f} bpm, {tl['meter']['num']}/4, keys: {keys}"
+
+
+# ---------------------------------------------------------------- sections (experimental, not in the pipeline)
+# M3 tried harmony-only segmentation: about half the boundaries right on standards, nothing on Let It Be (verse
+# and chorus share chords). Timelines ship without section labels until this is solved (P-01, handoffs/M3).
+
+
+def bar_features(audio: np.ndarray, sr: int, downbeats: np.ndarray, segs: Segments) -> np.ndarray:
+    """Per bar: mean CQT chroma (12) plus the time share of each chord root (12), both L2-normalised."""
+    import librosa
+
+    a = resample(audio, sr, 22050)
+    hop = 512
+    chroma = librosa.feature.chroma_cqt(y=a, sr=22050, hop_length=hop)
+    t = librosa.frames_to_time(np.arange(chroma.shape[1]), sr=22050, hop_length=hop)
+    edges = np.append(downbeats, downbeats[-1] + np.median(np.diff(downbeats)))
+    feats = []
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        c = chroma[:, (t >= lo) & (t < hi)]
+        c = c.mean(axis=1) if c.size else np.zeros(12)
+        r = np.zeros(12)
+        for s, e, lab in segs:
+            ov = min(e, hi) - max(s, lo)
+            if ov > 0 and lab not in ("N", "X"):
+                r[_root(lab)] += ov  # type: ignore[index]
+        feats.append(np.concatenate([c / (np.linalg.norm(c) + 1e-9), r / (np.linalg.norm(r) + 1e-9)]))
+    return np.array(feats)
+
+
+def find_sections(feats: np.ndarray, kernel: int = 4, min_len: int = 4, same: float = 0.8) -> list[tuple[int, int, str]]:
+    """Segments [start bar, end bar) with labels. Boundaries are peaks of a checkerboard novelty curve over the
+    bar self-similarity matrix (at least `min_len` bars apart, phrase lengths of 4 preferred); segments whose
+    lagged similarity to an earlier one is >= `same` share its letter. An unrepeated first/last segment is
+    Intro/Outro."""
+    n = len(feats)
+    if n < 2 * min_len:
+        return [(0, n, "A")]
+    S = np.clip(feats @ feats.T / 2, 0, 1)  # two normalised halves → cosine in [0, 1]
+    k = kernel
+    sign = np.outer(np.r_[-np.ones(k), np.ones(k)], np.r_[-np.ones(k), np.ones(k)])  # +1 within, -1 across
+    pad = np.pad(S, k, mode="edge")
+    nov = np.array([float((pad[i : i + 2 * k, i : i + 2 * k] * sign).sum()) for i in range(n)])
+    nov = np.maximum(nov, 0)
+    # greedy peak picking, preferring 4-bar phrase positions relative to bar 0
+    order = sorted(range(1, n), key=lambda i: -(nov[i] * (1.25 if i % 4 == 0 else 1.0)))
+    thresh = 0.35 * nov.max() if nov.max() > 0 else 1
+    bounds = [0, n]
+    for i in order:
+        if nov[i] < thresh:
+            break
+        if all(abs(i - b) >= min_len for b in bounds):
+            bounds.append(i)
+    bounds.sort()
+    spans = list(zip(bounds[:-1], bounds[1:], strict=True))
+
+    def sim(a: tuple[int, int], b: tuple[int, int]) -> float:
+        m = min(a[1] - a[0], b[1] - b[0])
+        return float(np.mean([S[a[0] + j, b[0] + j] for j in range(m)]))
+
+    labels: list[str] = []
+    letters = iter("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    for i, sp in enumerate(spans):
+        best = max(range(i), key=lambda j: sim(spans[j], sp), default=None)
+        if best is not None and sim(spans[best], sp) >= same:
+            labels.append(labels[best])
+        else:
+            labels.append(next(letters))
+    counts = Counter(labels)
+    if len(spans) > 2 and counts[labels[0]] == 1:
+        labels[0] = "Intro"
+    if len(spans) > 2 and counts[labels[-1]] == 1:
+        labels[-1] = "Outro"
+    return [(a, b, lab) for (a, b), lab in zip(spans, labels, strict=True)]
+
+
+def label_bars(bars: list[dict], sections: list[tuple[int, int, str]]) -> None:
+    """Writes `section` on the first bar of each segment and `pass` (nth time this letter is played) on all."""
+    seen: Counter[str] = Counter()
+    for a, b, lab in sections:
+        seen[lab] += 1
+        for i in range(a, min(b, len(bars))):
+            bars[i]["pass"] = seen[lab]
+        if a < len(bars):
+            bars[a]["section"] = lab

@@ -91,3 +91,26 @@ def test_validate_timeline():
     bad = tl([(0, 2000, "Cmaj7"), (1500, 4000, "D♭7")])
     assert A.validate_timeline(bad) == ["chords overlap"]
     assert A.validate_timeline({**good, "source": "guessed"})
+
+
+def test_regularise_merges_glitch_bars_and_fixes_beat_level():
+    # 4/4 at 1 s per bar; beat_this counted half notes in bars 3-4 and put a glitch downbeat at 4.25 s
+    beats = [0, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 4.25, 4.5, 4.75, 5, 5.25, 5.5, 5.75, 6]
+    b = A.Beats(np.array(beats), np.array([0, 1, 2, 3, 4, 4.25, 5, 6]))
+    r = A.regularise(b)
+    assert r.downbeats.tolist() == [0, 1, 2, 3, 4, 5, 6]
+    assert np.allclose(r.beats[8:12], [2, 2.25, 2.5, 2.75])
+    assert A.meter_of(r) == 4
+
+
+def test_seventh_share_and_vote():
+    segs = [(0, 2, "C:maj"), (2, 4, "G:7"), (4, 8, "N")]
+    assert A.seventh_share(segs) == 0.5
+    beats = np.arange(0, 4, 1.0)
+    per = {
+        "btc": [(0, 2, "C:maj7"), (2, 4, "E:min")],
+        "chordino": [(0, 2, "C:maj"), (2, 4, "G:maj")],
+        "madmom": [(0, 2, "A:min"), (2, 4, "G:maj")],
+    }
+    # beats 0-1: C wins (btc+chordino) and keeps BTC's quality; beats 2-3: G wins (chordino+madmom) over E
+    assert A.vote(per, beats, 4.0) == [(0.0, 2.0, "C:maj7"), (2.0, 4.0, "G:maj")]

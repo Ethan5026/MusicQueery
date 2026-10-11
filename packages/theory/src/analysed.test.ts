@@ -1,6 +1,6 @@
 import { Timeline } from '@mq/model'
 import { expect, test } from 'vitest'
-import { finishAnalysis, fromHarte, respellInKey, spellInKey, toHarte } from './analysed'
+import { finishAnalysis, fromHarte, leadSheetSeventh, respellInKey, spellInKey, toHarte } from './analysed'
 import { chord, formatChord, parseChord } from './chord'
 import { key } from './numeral'
 import { noteName } from './pitch'
@@ -90,4 +90,41 @@ test('finishAnalysis lists symbols it cannot read and stores them as N.C.', () =
   expect(out.unparsed).toEqual(['Q:xyz'])
   expect(out.chords[0]!.symbol).toBe('N.C.')
   expect(out.keys).toEqual([])
+})
+
+test('leadSheetSeventh writes the sevenths a jazz chart would', () => {
+  const ls = (sym: string, k: ReturnType<typeof key>, next: string | null = null) =>
+    formatChord(leadSheetSeventh(chord(sym), k, next ? chord(next) : null))
+  const C = key('C')
+  const Fm = key('F', 'minor')
+  expect(ls('C', C)).toBe('Cmaj7')
+  expect(ls('F', C)).toBe('Fmaj7')
+  expect(ls('G', C)).toBe('G7')
+  expect(ls('D', C)).toBe('D7') // V/V
+  expect(ls('Dm', C)).toBe('Dm7')
+  expect(ls('Bdim', C)).toBe('Bm7♭5')
+  expect(ls('C#dim', C)).toBe('C♯°7')
+  expect(ls('Fm', Fm)).toBe('Fm7')
+  expect(ls('Ab', Fm)).toBe('A♭maj7')
+  expect(ls('Bb', Fm)).toBe('B♭7')
+  expect(ls('Gdim', Fm)).toBe('Gm7♭5')
+  expect(ls('Cm', Fm, 'Fm')).toBe('C7')
+  expect(ls('Cm7', Fm, 'Fm7')).toBe('C7')
+  expect(ls('Cm', Fm, 'D♭')).toBe('Cm7')
+  // already explicit: untouched
+  expect(ls('C6', C)).toBe('C6')
+  expect(ls('G7♯9', C)).toBe('G7♯9')
+  expect(ls('Csus4', C)).toBe('Csus4')
+})
+
+test('finishAnalysis with sevenths', () => {
+  const beats = Array.from({ length: 32 }, (_, i) => i * 500)
+  const seq = ['D:min', 'G:maj', 'C:maj', 'A:min']
+  const raw = seq.map((s, i) => ({ startMs: i * 2000, endMs: (i + 1) * 2000, symbol: s }))
+  expect(finishAnalysis(raw, beats, { harte: true, sevenths: true }).chords.map((c) => c.symbol)).toEqual([
+    'Dm7',
+    'G7',
+    'Cmaj7',
+    'Am7',
+  ])
 })

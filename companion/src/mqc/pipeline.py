@@ -14,8 +14,7 @@ from .config import COMPANION, WORK_DIR
 from .spotify import Spotify
 from .store import Store
 
-DEFAULT_RECOGNISER = "btc"  # SP4 winner, see handoffs/M3-analysis.md
-MIN_CHORD_BEATS = 1
+DEFAULT_RECOGNISER = "auto"  # SP4: vote of BTC/Chordino/madmom, sevenths gated on jazz (handoffs/M3-analysis.md)
 OUT_DIR = COMPANION / "out"
 
 
@@ -30,9 +29,9 @@ def analyse_audio(
 ) -> dict:
     t0 = time.time()
     beats = beats or A.track_beats(audio, sr)
-    segs = A.RECOGNISERS[recogniser](audio, sr)
-    synced = A.beat_sync(segs, beats.beats, len(audio) / sr, min_beats=MIN_CHORD_BEATS)
-    tl, unparsed = A.build_timeline(track_id, duration_ms, beats, synced, f"mqc/{recogniser}+beat_this")
+    ch = A.recognise(audio, sr, beats, recogniser)
+    tl, unparsed = A.build_timeline(track_id, duration_ms, beats, ch.segs, f"mqc/{ch.name}+beat_this",
+                                    sevenths=ch.sevenths)
     if unparsed:
         log(f"  unparsed labels (stored as N.C.): {sorted(set(unparsed))}")
     errs = A.validate_timeline(tl)

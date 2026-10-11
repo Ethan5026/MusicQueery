@@ -1,0 +1,19 @@
+{
+ "name": "girl-from-ipanema",
+ "trackId": "1mzKd4lul92VCIdehoP8rg",
+ "title": "The Girl From Ipanema",
+ "artist": "Stan Getz, João Gilberto, Astrud Gilberto, Antônio Carlos Jobim",
+ "durationMs": 174826,
+ "capture": {
+  "offsetMs": 410.7,
+  "offsetMadMs": 6.0,
+  "firstSoundMs": 690.4988662131519,
+  "peak": 0.664
+ },
+ "chart": {
+  "playlist": "jazz1460",
+  "title": "The Girl From Ipanema"
+ },
+ "form": [],
+ "taps": []
+}
