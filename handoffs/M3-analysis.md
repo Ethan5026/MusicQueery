@@ -57,7 +57,7 @@ Worker store `PUT/GET /api/timelines/:id` with a bearer secret; the phone fetche
   Even Flow, As, Got to Get You Into My Life, Man's World; triads for Wake the Funk Up, Jedi, Cliffs of Dover,
   What Planet Is This, Lover (a standard, but this live version was gated pop: check). 16 timelines in the store.
 
-## Post-stage investigation (2026-10-11, report published as an artifact "Chord Accuracy Check")
+## Post-stage investigation (2026-10-11, report: https://claude.ai/code/artifact/e3432feb-fcbf-43e4-8f0e-35b1e6672b60)
 - `mqc import-annotated` + `companion/src/mqc/annotated.py`: 7 human-annotated songs (Isophonics: Let It Be, Something,
   Don't Stop Me Now, It's Too Late; Billboard: Just the Way You Are, Human Nature, Higher Ground; September skipped, no
   matching release). Offsets −1080…+300 ms; Higher Ground's peak is flat (one-chord vamp). `reports/annotated-bakeoff.json`
