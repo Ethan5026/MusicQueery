@@ -1,4 +1,4 @@
-// Fetches an analysed timeline from the Worker store (M3, D-32). M5 adds the IndexedDB cache and the screens.
+// Fetches a timeline from the Worker store (M3, D-32). `library.ts` caches it in IndexedDB.
 import { Timeline } from '@mq/model'
 import { API_URL } from '../config'
 
@@ -7,10 +7,15 @@ export type TimelineResult =
   | { status: 'missing' }
   | { status: 'error'; message: string }
 
-export async function fetchTimeline(spotifyTrackId: string, f: typeof fetch = fetch): Promise<TimelineResult> {
+export function fetchTimeline(spotifyTrackId: string, f: typeof fetch = fetch): Promise<TimelineResult> {
+  return fetchTimelineById(`spotify:track:${spotifyTrackId}`, f)
+}
+
+/** `id` is `spotify:track:<id>` or `chart:<slug>`. */
+export async function fetchTimelineById(id: string, f: typeof fetch = fetch): Promise<TimelineResult> {
   const t0 = performance.now()
   try {
-    const res = await f(`${API_URL}/timelines/spotify:track:${spotifyTrackId}`)
+    const res = await f(`${API_URL}/timelines/${id}`)
     if (res.status === 404) return { status: 'missing' }
     if (!res.ok) return { status: 'error', message: `HTTP ${res.status}` }
     const text = await res.text()

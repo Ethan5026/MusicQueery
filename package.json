@@ -10,6 +10,7 @@
     "dev": "pnpm --filter @mq/web dev",
     "build": "pnpm -r build",
     "test": "vitest run",
+    "e2e": "pnpm --filter @mq/web e2e",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",

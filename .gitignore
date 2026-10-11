@@ -17,3 +17,7 @@ __pycache__/
 *.wav
 companion/capture/bin/
 companion/out/
+
+# Playwright
+test-results/
+playwright-report/

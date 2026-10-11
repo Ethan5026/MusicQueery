@@ -3,10 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import { isStandalone } from './config'
 import { log, startRemoteLog } from './debug/log'
-import { runClock, useApp } from './services'
+import { perf } from './perf'
+import { restoreSession, runClock, useApp } from './services'
 import { handleCallback } from './spotify/auth'
-import { App } from './ui/App'
-import './ui/styles.css'
+import { loadSettings } from './store/settings'
+import { Shell } from './ui/Shell'
+import './ui/fonts'
+import './ui/app.css'
 
 startRemoteLog()
 log('info', 'boot', {
@@ -28,12 +31,14 @@ registerSW({
 
 void navigator.storage?.persist?.().then((persisted) => log('info', 'storage.persist', { persisted }))
 
-void handleCallback().then((handled) => {
+void Promise.all([handleCallback(), loadSettings()]).then(([handled]) => {
   if (handled) useApp.getState().refreshAuth()
   runClock()
+  perf.start()
+  void restoreSession()
   createRoot(document.getElementById('root') as HTMLElement).render(
     <StrictMode>
-      <App />
+      <Shell />
     </StrictMode>,
   )
 })

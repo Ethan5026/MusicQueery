@@ -1,4 +1,4 @@
-// Spotify Web API calls used by M1. Only SpotifyClock and the debug controls call these (D-16).
+// Spotify Web API calls. Only SpotifyClock, the track library and the debug controls call these (D-16).
 
 import type { PlayerReading } from '../clock/SpotifyClock'
 import { log } from '../debug/log'
@@ -62,6 +62,14 @@ export async function fetchPlayer(): Promise<PlayerReading> {
     trackName: j.item?.name ?? null,
     artists: j.item?.artists?.map((a) => a.name).join(', ') ?? null,
   }
+}
+
+/** Title and artists of one track (batch `/tracks?ids=` is 403 in dev mode, D-35). Null if not logged in or not found. */
+export async function fetchTrack(id: string): Promise<{ title: string; artist: string } | null> {
+  const res = await call(`/tracks/${id}`)
+  if (!res.ok) return null
+  const j = (await res.json()) as { name: string; artists?: { name: string }[] }
+  return { title: j.name, artist: j.artists?.map((a) => a.name).join(', ') ?? '' }
 }
 
 async function command(method: string, path: string): Promise<void> {
