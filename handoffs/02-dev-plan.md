@@ -55,8 +55,8 @@ Fix the stack, architecture, milestone list with exit criteria, risks and spikes
 | **M6** Backing tracks [`M6-backing.md`] | Tracks tab, `AudioClock`, band engine (SP5), key/tempo/style/mute/count-in, iReal import, Drills, On Spotify search + play + A–B loop | 1300-tune playlist imports; 60–300 BPM, jitter < 5 ms, no dropouts in 10 min on the iPhone; screens show exact chords; Spotify loop gap ≤ 500 ms |
 | **M7** Listening + Predicted [`M7-listen.md`] | Mic worklet → beat-synced chroma → decoder (templates + HMM; ONNX only if it wins SP7), biased by cached timelines; chorus-consensus Predicted; link + align an iReal chart (bonus for standards; pop comes first, D-36; pop charts often differ in bar structure from the recording, so alignment needs insert/delete, not only repeats); section detection if P-05 is still open; chord fixes (`edits[]`); upload live timelines (D-09) | 3 tracks over speakers: chord within 1 beat, ≥ 55% per-beat with the user silent, confidence shown while playing; linked chart raises accuracy (before/after quoted); fixes persist |
 | **M8** Map, Coach, polish [`M8-polish.md`] | Song map (passes, key bands, seek, totals, loop span), Scale coach (next 8, lenses, landing note, ii–V–I tips), settings, error states, battery/perf, export | A week of real practice on the device; bug list triaged; all five tabs work |
-
-M1–M5 already make a usable app for analysed tracks. M5b, M6, M7 and M8 are independent of each other.
+| **M9** Melody + Solo view [`M9-melody.md`] (user, added during M5) | Follow the lead vocal or instrument with its notes in your key. **Companion:** during the same capture (no extra replay) separate the lead (vocals stem; the melodic "other" stem for instrumentals) and transcribe it to notes (SP9), onsets snapped to the beat grid, stored as an optional `melody[]` in Timeline v1 (`startMs`, `endMs`, `midi`, `confidence`, plus the stem it came from). Tracks analysed before M9 are re-queued through the M5 queue, since captured audio is deleted (D-18). **Phone:** a Solo view on Stand (Chart / Solo switch, both orientations, best sideways): the melody scrolls on a large staff in written pitch for the instrument (D-05), spelled in the current key and moved by octaves into the instrument's comfortable range, with a playhead, two bars of look-ahead, rests for gaps and names under the notes; the current chord above; and the scale below at full width with the melody's notes marked on it, so the scales get the space a solo needs. Low-confidence notes are drawn lighter | On 3 pop songs from the user's playlist the user can play the melody along on alto from the Solo view on at least 2; note F-measure (50 ms onsets, ±50 cents) quoted on any song with a reference transcription; separation + transcription add at most 2× the track length on the PC; the Solo view keeps the M4 render budget (no frame over 50 ms) |
+M1–M5 already make a usable app for analysed tracks. M5b, M6, M7, M8 and M9 are independent of each other.
 
 ## Spikes (time-boxed inside the milestone named)
 | ID | In | Question | Fallback |
@@ -69,6 +69,7 @@ M1–M5 already make a usable app for analysed tracks. M5b, M6, M7 and M8 are in
 | SP6 | M2 | iReal `irealb://` format (obfuscated chord string, playlist HTML): reuse `ireal-reader` or write our own | Own parser tested on the corpus |
 | SP7 | M7 | Mic in the standalone PWA: raw constraints (no AGC/NS/EC), worklet CPU, chroma quality over speakers | Coarser chroma, more timeline bias |
 | SP8 | M1 | Screen Wake Lock in the standalone PWA on the iPhone's iOS version | Silent looping video |
+| SP9 | M9 | Melody from a mix: vocal separation (Demucs-class) then transcription (basic-pitch vs pYIN/CREPE on the stem); note accuracy on pop vocals, octave errors, slides and vibrato, CPU time per track on the PC | Pitch contour only (no notes) drawn on the staff; melody shown for choruses only where it is clearest |
 
 ## Risks (likelihood / impact)
 | Risk | L/I | Mitigation |
@@ -78,6 +79,7 @@ M1–M5 already make a usable app for analysed tracks. M5b, M6, M7 and M8 are in
 | Jazz chord recognition too weak | H/H | Chart alignment, user fixes, confidence shown, Predicted from repeats. *M3: pop 0.70–0.85, jazz/Latin 0.54–0.64 MIREX sevenths (D-34)* |
 | iOS PWA limits (no background work, audio session quirks) | M/M | Dashboard stays on screen (wake lock); SP5/SP8 run early |
 | No remote Web Inspector | H/M | Debug overlay + remote log from M1 |
+| Melody transcription wrong (octave jumps, slides, backing vocals) | H/M | Confidence shown, notes snapped to the key and beat grid, octave folding into the instrument's range; user fixes later (as `edits[]`) |
 | Scope: 8 milestones for a solo user | M/M | Usable after M5; later milestones can be cut independently |
 | Copyright | L/L | Personal use; captured audio deleted; only derived timelines kept |
 

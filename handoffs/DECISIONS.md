@@ -151,6 +151,11 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
 - **D-47** (M5, user) New milestone **M5b Playlist inbox**: a Spotify playlist where adding a song queues it for analysis and
   analysed songs stay as the practice set; scope and exit criteria in `02-dev-plan.md`. Independent of M6–M8.
 
+- **D-48** (M5, user) New milestone **M9 Melody + Solo view**, planned rather than started in M5: it needs a new analysis step on the
+  PC (lead separation + note transcription, spike SP9), an optional `melody[]` in Timeline v1 (additive, so v1 stays valid), and a
+  re-capture of tracks analysed before it (audio is deleted, D-18). The Solo view gives the melody in written pitch for the instrument
+  and the scale at full width. Independent of M5b–M8.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
