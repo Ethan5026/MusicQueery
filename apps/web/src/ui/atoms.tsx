@@ -52,10 +52,10 @@ const SOURCE: Record<TimelineSource, [string, string]> = {
   predicted: ['pred', 'Predicted'],
 }
 
-/** Where the chords came from (D-04). */
-export function SourceBadge({ source }: { source: TimelineSource }) {
+/** Where the chords came from (D-04). A saved listen that isn't being added to right now says "Heard live". */
+export function SourceBadge({ source, listening = true }: { source: TimelineSource; listening?: boolean }) {
   const [cls, text] = SOURCE[source]
-  return <span className={`src ${cls}`}>{text}</span>
+  return <span className={`src ${cls}`}>{source === 'live' && !listening ? 'Heard live' : text}</span>
 }
 
 export type { SyncState }

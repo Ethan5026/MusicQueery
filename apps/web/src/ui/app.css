@@ -411,3 +411,27 @@ button.sync:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px
 .loopbtn.pending { border-color: var(--brass); color: var(--brass); }
 .loopbtn.on { border-style: solid; border-color: var(--brass); background: var(--brass-soft); color: var(--brass); }
 .pbar .loopband { position: absolute; top: -3px; bottom: -3px; background: color-mix(in oklab, var(--brass) 25%, transparent); border-radius: 3px; pointer-events: none; }
+
+/* ---------- Listening live, Predicted, chord fixes (M7) ---------- */
+.hero-src { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+button.hero-chord { border: 0; background: none; padding: 0; color: inherit; text-align: left; cursor: pointer; border-radius: 10px; }
+button.hero-chord:disabled { cursor: default; }
+button.hero-chord:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+.micchip { display: inline-flex; align-items: center; gap: 5px; font: 600 11.5px var(--f-label); letter-spacing: .05em; text-transform: uppercase; padding: 4px 8px; border-radius: 999px; border: 0; background: color-mix(in oklab, var(--alert) 16%, transparent); color: var(--alert); cursor: pointer; }
+.micchip i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.conf { display: inline-flex; align-items: center; gap: 5px; font: 500 11px var(--f-mono); color: var(--ink-2); }
+.conf i { display: block; width: 34px; height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.conf b { display: block; height: 100%; background: var(--warn); }
+.conf.low b { background: var(--alert); }
+/* Predicted chords are grey until the audio confirms them (sketch) */
+.next.pred li { background: var(--surface-2); }
+.next.pred li:first-child { outline-color: var(--rule); }
+.next.pred li .ch { color: var(--ink-2); }
+.next.pred li .mono { color: var(--ink-2); }
+.fix { gap: 10px; }
+.fix-now { font-size: 48px; text-align: center; min-height: 64px; }
+.fix-grid { display: grid; gap: 5px; }
+.fix-grid.roots { grid-template-columns: repeat(6, 1fr); }
+.fix-grid.quals { grid-template-columns: repeat(6, 1fr); }
+.fix-grid .tog { padding: 6px 2px; font-size: 15px; }
+.fix-all { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--ink-2); }

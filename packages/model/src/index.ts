@@ -102,6 +102,9 @@ export const TimelineEdit = z.object({
   prev: ChordText.optional(),
 })
 
+/** A track's chord fixes, kept apart from its timeline (M7): `PUT /api/edits/:id` takes `{ edits }`. */
+export const TimelineEdits = z.array(TimelineEdit).max(500)
+
 export const Timeline = z.object({
   schema: z.literal('mq.timeline/1'),
   id: z.string().min(1).max(120).describe('spotify:track:<id> or chart:<id>'),

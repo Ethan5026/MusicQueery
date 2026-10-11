@@ -1,0 +1,299 @@
+// Listening live (M7, D-04): the phone's mic → AudioWorklet → decoder Worker, lined up with the track through
+// SpotifyClock (the same frame → performance.now() → position mapping the M1 drift probe validated). While
+// Listen is on, a Spotify track with no analysed timeline is decoded as it plays: Stand shows the chord heard now,
+// and ahead of it whatever an earlier listen or the song's own repeats predict. Each stretch of playback is
+// re-decoded when it ends (seek, pause, track change, stop) and saved as the track's live timeline.
+//
+// Test mode (SP7, Settings → Diagnostics) decodes even when the track is analysed, and scores the live chord
+// against the analysed one as it plays; the live result is saved and uploaded too, for scoring on the PC.
+import type { Timeline } from '@mq/model'
+import { LIVE_GENERATOR, liveTimeline, mergeLive } from '@mq/listen'
+import { canonical, parseChord, pc } from '@mq/theory'
+import { create } from 'zustand'
+import { log } from '../debug/log'
+import { clock, useSession } from '../services'
+import { chordAt } from '../timeline/fetch'
+import { loadLive, saveLive } from '../timeline/live'
+import type { FinalMsg, FromWorker, NowMsg, ToWorker, TrackChord } from './decoder.worker'
+import workletUrl from './mic-processor.js?url'
+
+export type ListenMode = 'listen' | 'test'
+
+interface AudioSessionLike {
+  type: string
+}
+
+export interface ListenInfo {
+  sampleRate?: number
+  baseLatencyMs?: number
+  settings?: MediaTrackSettings
+  audioSession?: string
+}
+
+interface ListenState {
+  status: 'off' | 'starting' | 'on' | 'error'
+  mode: ListenMode
+  error: string
+  /** latest decoder output (any track) */
+  now: NowMsg | null
+  /** mic peak (0..1) and worklet time per second of audio (ms), ~10 Hz */
+  peak: number
+  workletMs: number
+  info: ListenInfo
+  /** test mode: beats where the live chord matched the analysed one (root + third), of beats compared */
+  agree: { hit: number; n: number }
+  saved: number
+}
+
+export const useListen = create<ListenState>(() => ({
+  status: 'off',
+  mode: 'listen',
+  error: '',
+  now: null,
+  peak: 0,
+  workletMs: 0,
+  info: {},
+  agree: { hit: 0, n: 0 },
+  saved: 0,
+}))
+
+let ctx: AudioContext | null = null
+let stream: MediaStream | null = null
+let node: AudioWorkletNode | null = null
+let worker: Worker | null = null
+let anchorTimer = 0
+let offJump: (() => void) | null = null
+let prevSessionType: string | null = null
+/** saved live timeline of the track being followed (earlier listens) */
+let base: { id: string; tl: Timeline | null } | null = null
+
+const send = (m: ToWorker, transfer: Transferable[] = []) => worker?.postMessage(m, transfer)
+
+/** Starts the mic (call from a tap: iOS needs the gesture for getUserMedia and the AudioContext). */
+export async function startListening(mode: ListenMode = 'listen'): Promise<boolean> {
+  if (useListen.getState().status === 'on' || useListen.getState().status === 'starting') {
+    useListen.setState({ mode })
+    return true
+  }
+  useListen.setState({ status: 'starting', mode, error: '', agree: { hit: 0, n: 0 } })
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('this browser has no microphone access')
+    if (typeof AudioWorkletNode === 'undefined') throw new Error('this browser has no AudioWorklet')
+    const session = (navigator as Navigator & { audioSession?: AudioSessionLike }).audioSession
+    if (session) {
+      prevSessionType = session.type
+      try {
+        session.type = 'play-and-record'
+      } catch {
+        // older Safari: the default session records too
+      }
+    }
+    // Raw mic: no echo cancellation, noise suppression or gain riding, which smear chords (SP7).
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    })
+    ctx = new AudioContext()
+    if (ctx.state !== 'running') await ctx.resume()
+    await ctx.audioWorklet.addModule(workletUrl)
+    node = new AudioWorkletNode(ctx, 'mic-processor')
+    worker = new Worker(new URL('./decoder.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e: MessageEvent<FromWorker>) => onWorker(e.data)
+    worker.onerror = (e) => fail(`decoder: ${e.message}`)
+    const ch = new MessageChannel()
+    node.port.postMessage({ port: ch.port1 }, [ch.port1])
+    send({ type: 'start', sampleRate: ctx.sampleRate, port: ch.port2 }, [ch.port2])
+    node.port.onmessage = (e: MessageEvent<{ type: 'meter'; peak: number; busyMs: number }>) => {
+      if (e.data.type === 'meter') useListen.setState({ peak: e.data.peak, workletMs: e.data.busyMs * 10 })
+    }
+    const src = ctx.createMediaStreamSource(stream)
+    const mute = ctx.createGain()
+    mute.gain.value = 0
+    src.connect(node).connect(mute).connect(ctx.destination)
+    anchorTimer = window.setInterval(sendAnchor, 200)
+    sendAnchor()
+    offJump = clock.onJump((e) => {
+      if (e.kind === 'seek' || e.kind === 'track' || e.kind === 'pause' || e.kind === 'idle') send({ type: 'segment', reason: e.kind })
+      if (e.kind === 'track' || e.kind === 'lock') void loadBase()
+    })
+    void loadBase()
+    const track = stream.getAudioTracks()[0]
+    const info: ListenInfo = {
+      sampleRate: ctx.sampleRate,
+      baseLatencyMs: Math.round(ctx.baseLatency * 10000) / 10,
+      ...(track ? { settings: track.getSettings() } : {}),
+      ...(session ? { audioSession: session.type } : {}),
+    }
+    useListen.setState({ status: 'on', info })
+    log('info', 'listen.start', { mode, ...info, settings: info.settings ? JSON.stringify(info.settings) : null })
+    return true
+  } catch (err) {
+    fail(String(err))
+    return false
+  }
+}
+
+export function stopListening(reason = 'stop'): void {
+  if (useListen.getState().status === 'off') return
+  send({ type: 'stop' })
+  // let the worker post its final segment before it goes
+  const w = worker
+  setTimeout(() => w?.terminate(), 1500)
+  worker = null
+  window.clearInterval(anchorTimer)
+  offJump?.()
+  offJump = null
+  node?.disconnect()
+  node = null
+  stream?.getTracks().forEach((t) => t.stop())
+  stream = null
+  void ctx?.close()
+  ctx = null
+  const session = (navigator as Navigator & { audioSession?: AudioSessionLike }).audioSession
+  if (session && prevSessionType !== null) {
+    try {
+      session.type = prevSessionType
+    } catch {
+      // ignore
+    }
+  }
+  useListen.setState({ status: 'off', now: null, peak: 0 })
+  useSession.setState({ live: null })
+  log('info', 'listen.stop', { reason })
+}
+
+function fail(message: string): void {
+  log('warn', 'listen.failed', { err: message })
+  stopListening('error')
+  useListen.setState({ status: 'error', error: message })
+}
+
+// iOS stops the mic in the background: finish the segment and stop cleanly.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && useListen.getState().status === 'on') stopListening('hidden')
+})
+
+/** Mic frame ↔ track position, five times a second. */
+function sendAnchor(): void {
+  if (!ctx) return
+  const frame = Math.round(ctx.currentTime * ctx.sampleRate)
+  const ts = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null
+  const perf =
+    ts?.performanceTime && ts.contextTime !== undefined
+      ? ts.performanceTime - (ts.contextTime - frame / ctx.sampleRate) * 1000
+      : performance.now() - (ctx.currentTime - frame / ctx.sampleRate) * 1000
+  const tid = clock.trackId
+  send({
+    type: 'anchor',
+    anchor: { frame, trackMs: clock.positionMs(perf), playing: clock.playing, trackId: tid ? `spotify:track:${tid}` : null },
+  })
+}
+
+/** The saved live timeline of the followed track: a prior for the decoder and the look-ahead on Stand. */
+async function loadBase(): Promise<void> {
+  const tid = clock.trackId
+  if (!tid) return
+  const id = `spotify:track:${tid}`
+  if (base?.id === id) return
+  base = { id, tl: null }
+  const tl = await loadLive(id)
+  if (base?.id !== id) return
+  base = { id, tl }
+  if (tl) send({ type: 'prior', trackId: id, chords: tl.chords.map((c) => ({ ...c, confidence: c.confidence ?? 0.5 })) })
+}
+
+// ---------------------------------------------------------------- worker output
+
+let lastViewKey = ''
+
+function onWorker(m: FromWorker): void {
+  if (m.type === 'error') return fail(m.message)
+  if (m.type === 'final') return void onFinal(m)
+  useListen.setState({ now: m })
+  scoreTest(m)
+  updateView(m)
+}
+
+/** Should Stand show the live view for the session's track? Only when it has no analysed or exact timeline. */
+function showsLive(id: string | null): boolean {
+  const s = useSession.getState()
+  if (s.driver !== 'spotify' || !id || s.id !== id) return false
+  return !s.timeline || s.timeline.source === 'live'
+}
+
+/** Stand's timeline while listening: earlier listens, this segment's settled chords, the chord heard now, then
+ *  the predicted ones. Rebuilt when the chord or the settled part changes. */
+function updateView(m: NowMsg): void {
+  if (!showsLive(m.trackId)) {
+    if (useSession.getState().live) useSession.setState({ live: null })
+    return
+  }
+  const key = `${m.trackId}|${m.symbol}|${m.settled.length}|${m.settled[m.settled.length - 1]?.endMs ?? 0}|${m.predicted.length}`
+  if (key === lastViewKey) return
+  lastViewKey = key
+  const id = m.trackId!
+  const nowMs = clock.positionMs()
+  const settledEnd = m.settled[m.settled.length - 1]?.endMs ?? m.sinceMs
+  const chords: TrackChord[] = [...m.settled]
+  const sym = m.symbol && canonical(m.symbol) ? m.symbol : null
+  const curEnd = nowMs + 1500
+  if (sym) chords.push({ startMs: Math.min(settledEnd, m.sinceMs), endMs: curEnd, symbol: sym, confidence: m.confidence })
+  const prior = base?.id === id ? base.tl : null
+  // Predicted from the song's repeats, only where no earlier listen covers it
+  const coveredTo = prior?.chords[prior.chords.length - 1]?.endMs ?? 0
+  for (const p of m.predicted) if (p.startMs >= curEnd && p.startMs >= coveredTo) chords.push(p)
+  // beats ahead on the current grid so countdowns and beat dots keep going
+  const beats = [...m.beats]
+  const period = m.bpm > 0 ? 60000 / m.bpm : 0
+  if (period > 0 && beats.length) for (let t = beats[beats.length - 1]! + period; t < nowMs + 10000; t += period) beats.push(t)
+  const durationMs = clock.last?.durationMs ?? prior?.durationMs ?? 0
+  const seg = liveTimeline({ id, durationMs, chords, beats, createdAt: new Date().toISOString() })
+  const view = prior ? mergeLive(prior, seg) : seg
+  useSession.setState({ live: view })
+}
+
+async function onFinal(m: FinalMsg): Promise<void> {
+  if (m.chords.length < 2 || m.seconds < 10) return
+  const durationMs = clock.last && `spotify:track:${clock.last.trackId}` === m.trackId ? clock.last.durationMs : 0
+  const seg = liveTimeline({
+    id: m.trackId,
+    durationMs: durationMs || Math.max(...m.chords.map((c) => c.endMs)),
+    chords: m.chords,
+    beats: m.beats,
+    createdAt: new Date().toISOString(),
+    generator: LIVE_GENERATOR,
+  })
+  const saved = await saveLive(seg)
+  if (base?.id === m.trackId) base = { id: m.trackId, tl: saved }
+  useListen.setState((s) => ({ saved: s.saved + 1 }))
+  log('info', 'listen.saved', { id: m.trackId, reason: m.reason, seconds: Math.round(m.seconds), chords: seg.chords.length })
+  // a track without an analysis now opens with what was heard
+  const s = useSession.getState()
+  if (s.id === m.trackId && (!s.timeline || s.timeline.source === 'live')) useSession.setState({ timeline: saved, status: 'ok' })
+}
+
+// ---------------------------------------------------------------- SP7 test mode
+
+let lastScoredBeat = -1
+
+/** Test mode: once per beat, does the live chord match the analysed one (root and third)? */
+function scoreTest(m: NowMsg): void {
+  const s = useSession.getState()
+  if (useListen.getState().mode !== 'test' || !s.timeline || s.timeline.source === 'live' || s.id !== m.trackId) return
+  const pos = clock.positionMs()
+  const beat = Math.floor(pos / (m.bpm > 0 ? 60000 / m.bpm : 500))
+  if (beat === lastScoredBeat) return
+  lastScoredBeat = beat
+  const ref = chordAt(s.timeline, pos)
+  if (!ref || !m.symbol) return
+  const want = triadKey(ref.symbol)
+  if (want === null) return
+  const same = triadKey(m.symbol) === want
+  useListen.setState((st) => ({ agree: { hit: st.agree.hit + (same ? 1 : 0), n: st.agree.n + 1 } }))
+}
+
+/** Root pitch class + minor third or not: what majmin scoring compares. N.C. and unreadable → null. */
+function triadKey(symbol: string): string | null {
+  const c = parseChord(symbol)
+  if (!c || c.kind !== 'chord') return null
+  return `${pc(c.root)}${c.third === 'min' ? 'm' : ''}`
+}

@@ -5,16 +5,20 @@
 import type { Timeline } from '@mq/model'
 import { type Moment, type MomentKey, analyseTimeline } from '@mq/theory'
 import { useEffect, useMemo, useRef } from 'react'
+import { useListen } from '../../listen/listener'
 import { type Driver, activeTransport, clock, retryFollow, useApp, useSession } from '../../services'
 import { login } from '../../spotify/auth'
 import { type Settings, useSettings } from '../../store/settings'
+import { withEdits } from '../../timeline/edits'
 import type { TrackMeta } from '../../timeline/library'
 import { AnalyseButton } from '../AnalyseButton'
 import { Acc, ChordSym, Seg, SourceBadge, SyncBadge } from '../atoms'
 import { Calibrate } from './Calibrate'
+import { FixChord } from './FixChord'
 import { InstrumentSeg } from './InstrumentSeg'
 import { Keyboard } from './Keyboard'
 import { LeadSheet } from './LeadSheet'
+import { Confidence, ListenButton, ListenChip, ListeningWait } from './Listen'
 import { LoopBand, LoopButton } from './Loop'
 import { frameBus, useLandscape, useMoment, useStandUi, useSync } from './live'
 import { type PlayView, playView } from './play'
@@ -23,17 +27,23 @@ import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from
 
 
 export function Stand() {
-  const { timeline, meta, status, driver } = useSession()
+  const { timeline, live, edits, meta, status, driver } = useSession()
   const settings = useSettings()
-  const m = useMoment(timeline, settings)
+  // while listening, the live view replaces the timeline; the track's fixes go on top of either (M7)
+  const shown = useMemo(() => {
+    const base = live ?? timeline
+    return base ? withEdits(base, edits) : null
+  }, [live, timeline, edits])
+  const m = useMoment(shown, settings)
   const land = useLandscape()
   const calibrating = useStandUi((s) => s.calibrating)
+  const fixing = useStandUi((s) => s.fixing)
   let body
-  if (timeline && meta && m)
+  if (shown && meta && m)
     body = land ? (
-      <LeadSheet tl={timeline} meta={meta} m={m} settings={settings} />
+      <LeadSheet tl={shown} meta={meta} m={m} settings={settings} />
     ) : (
-      <StandView tl={timeline} meta={meta} m={m} settings={settings} />
+      <StandView tl={shown} meta={meta} m={m} settings={settings} />
     )
   else if (driver === 'spotify' && meta) body = <NotAnalysed meta={meta} status={status} />
   else if (status === 'loading') body = <div className="stand-empty">Opening…</div>
@@ -42,6 +52,7 @@ export function Stand() {
     <>
       {body}
       {calibrating && <Calibrate />}
+      {fixing && shown && m && <FixChord tl={shown} m={m} />}
     </>
   )
 }
@@ -182,7 +193,15 @@ function Progress({ tl, durationMs, positionMs }: { tl: Timeline; durationMs: nu
 /** Following a Spotify track that has no analysed timeline yet. */
 function NotAnalysed({ meta, status }: { meta: TrackMeta; status: string }) {
   const error = useSession((s) => s.error)
+  const listening = useListen((s) => s.status === 'on')
   const sid = meta.id.replace('spotify:track:', '')
+  if (listening && status !== 'loading')
+    return (
+      <div className="stand">
+        <NowPlaying meta={meta} />
+        <ListeningWait />
+      </div>
+    )
   return (
     <div className="stand">
       <NowPlaying meta={meta} />
@@ -197,8 +216,9 @@ function NotAnalysed({ meta, status }: { meta: TrackMeta; status: string }) {
             <p>
               {status === 'error'
                 ? `Couldn’t fetch the chords (${error}).`
-                : 'No chords for this recording yet. It needs analysing on the PC first.'}
+                : 'No chords for this recording yet. Listen with the phone’s mic now, or have the PC analyse it.'}
             </p>
+            <ListenButton />
             {status === 'missing' && (
               <AnalyseButton id={meta.id} title={meta.title} {...(meta.artist ? { artist: meta.artist } : {})} onDone={retryFollow} />
             )}
@@ -239,6 +259,10 @@ function NothingPlaying() {
 
 function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m: Moment; settings: Settings }) {
   const setSettings = useSettings((s) => s.set)
+  const setFixing = useStandUi((s) => s.setFixing)
+  const listening = useListen((s) => s.status === 'on')
+  const liveConf = useListen((s) => s.now?.confidence ?? null)
+  const isLive = tl.source === 'live'
   const inst = settings.instrument
   const home = homeKey(tl, inst)
   const bpm = tempoAt(tl, m.positionMs)
@@ -301,12 +325,23 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
       <section className="card hero" aria-label="Current chord">
         <div className="hero-top">
           <span className="lbl">{section ?? (m.chord ? 'Now' : 'Before the first chord')}</span>
-          <SourceBadge source={tl.source} />
+          <span className="hero-src">
+            {isLive && listening && liveConf !== null && <Confidence value={liveConf} />}
+            <ListenChip />
+            <SourceBadge source={tl.source} listening={listening} />
+          </span>
         </div>
         <div className="hero-mid">
-          <div className="hero-chord" data-testid="hero-chord">
+          <button
+            type="button"
+            className="hero-chord"
+            data-testid="hero-chord"
+            aria-label="Fix this chord"
+            disabled={m.eventIndex < 0 || tl.source === 'exact'}
+            onClick={() => setFixing(true)}
+          >
             <ChordSym chord={m.chord} />
-          </div>
+          </button>
         </div>
         <div className="hero-bot">
           <span className="hero-fn">
@@ -327,9 +362,9 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
         </div>
       </section>
 
-      <section className="card next" aria-label="Up next">
+      <section className={`card next${isLive ? ' pred' : ''}`} aria-label="Up next">
         <div className="next-h">
-          <span className="lbl">Up next</span>
+          <span className="lbl">{isLive ? 'Up next · Predicted' : 'Up next'}</span>
           {barPos && (
             <span className="lbl">
               Bar {barPos.n} / {barPos.total}
@@ -343,7 +378,7 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
               <span className="mono">{n.inBeats === 1 ? '1 beat' : `${n.inBeats} beats`}</span>
             </li>
           ))}
-          {m.next.length === 0 && <li className="none">End</li>}
+          {m.next.length === 0 && <li className="none">{isLive ? 'After a repeat' : 'End'}</li>}
         </ol>
       </section>
 

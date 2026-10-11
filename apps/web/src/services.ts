@@ -21,6 +21,7 @@ import { log } from './debug/log'
 import { fetchPlayer, player } from './spotify/api'
 import { loadTokens, sp1Record, type Sp1Record } from './spotify/auth'
 import { idbGet, idbSet } from './store/idb'
+import { type Edit, loadEdits, saveEdits } from './timeline/edits'
 import { DEMO_ID, type LoadResult, type TrackMeta, loadTimeline, revalidate, trackMeta } from './timeline/library'
 import { wakeLock } from './wakelock'
 
@@ -161,7 +162,13 @@ interface SessionState {
   error: string
   /** the backing track behind the 'audio' driver */
   band: BandSpec | null
+  /** while listening (M7): what the mic hears on the followed track, shown instead of `timeline` */
+  live: Timeline | null
+  /** the open track's chord fixes (M7), applied over whichever timeline is shown */
+  edits: Edit[]
   setTab: (tab: Tab) => void
+  /** Replaces the open track's fixes (saved on the phone and in the store). */
+  setEdits: (edits: Edit[]) => void
   /** Opens a recorded timeline under the ManualClock. Resolves to the load result. */
   open: (id: string, startMs?: number) => Promise<LoadResult>
 }
@@ -183,6 +190,15 @@ export const useSession = create<SessionState>((set, get) => ({
   status: 'idle',
   error: '',
   band: null,
+  live: null,
+  edits: [],
+  setEdits: (edits) => {
+    const id = get().id
+    if (!id) return
+    set({ edits })
+    void saveEdits(id, edits)
+    log('info', 'edits.set', { id, n: edits.length })
+  },
   setTab: (tab) => {
     history.replaceState(null, '', `#${tab}`)
     set({ tab })
@@ -191,7 +207,7 @@ export const useSession = create<SessionState>((set, get) => ({
     const mine = ++seq
     const keep = get()
     set({ status: 'loading', error: '' })
-    const [r, meta] = await Promise.all([loadTimeline(id), trackMeta(id)])
+    const [r, meta, edits] = await Promise.all([loadTimeline(id), trackMeta(id), loadEdits(id)])
     if (mine !== seq) return r
     if (r.status !== 'ok') {
       // Keep whatever was open; report why the new one didn't load.
@@ -200,7 +216,7 @@ export const useSession = create<SessionState>((set, get) => ({
     }
     band.pause()
     manual.load(id, r.timeline.durationMs, startMs)
-    set({ driver: 'manual', id, timeline: r.timeline, meta, status: 'ok', error: '' })
+    set({ driver: 'manual', id, timeline: r.timeline, meta, status: 'ok', error: '', live: null, edits })
     log('info', 'session.open', { id, from: r.from, chords: r.timeline.chords.length, startMs: Math.round(startMs) })
     if (r.from === 'cache') refreshLater(id, mine)
     saveSession()
@@ -230,10 +246,11 @@ async function follow(trackId: string): Promise<void> {
     return
   }
   const mine = ++seq
-  useSession.setState({ driver: 'spotify', id, timeline: null, meta, status: 'loading', error: '' })
-  const [r, m] = await Promise.all([loadTimeline(id), meta ?? trackMeta(id)])
+  useSession.setState({ driver: 'spotify', id, timeline: null, meta, status: 'loading', error: '', live: null, edits: [] })
+  const [r, m, edits] = await Promise.all([loadTimeline(id), meta ?? trackMeta(id), loadEdits(id)])
   if (mine !== seq) return
   log('info', 'session.follow', { id, status: r.status, ...(r.status === 'ok' ? { from: r.from } : {}) })
+  useSession.setState({ edits })
   if (r.status === 'ok') {
     useSession.setState({ timeline: r.timeline, meta: m, status: 'ok' })
     if (r.from === 'cache') refreshLater(id, mine)
@@ -274,7 +291,7 @@ clock.onJump((e) => {
     if (s.id && s.timeline) {
       manual.load(s.id, s.timeline.durationMs, e.fromMs)
       useSession.setState({ driver: 'manual' })
-    } else useSession.setState({ driver: 'manual', id: null, meta: null, timeline: null, status: 'idle', error: '' })
+    } else useSession.setState({ driver: 'manual', id: null, meta: null, timeline: null, status: 'idle', error: '', live: null, edits: [] })
   }
   if (useSession.getState().driver === 'spotify') {
     updateWake()
@@ -453,6 +470,8 @@ export async function openBand(spec: BandSpec, startMs = 0): Promise<boolean> {
     driver: 'audio',
     id: timeline.id,
     timeline,
+    live: null,
+    edits: [],
     meta: { id: timeline.id, title: chart.title, artist: specLine(spec), ...(chart.style ? { style: chart.style } : {}) },
     status: 'ok',
     error: '',

@@ -112,7 +112,15 @@ const subscribeOrientation = (cb: () => void) => {
 export const useLandscape = (): boolean => useSyncExternalStore(subscribeOrientation, () => matchMedia(LANDSCAPE).matches)
 
 /** Screen-level UI state that outlives a rotation. */
-export const useStandUi = create<{ calibrating: boolean; setCalibrating: (v: boolean) => void }>((set) => ({
+export const useStandUi = create<{
+  calibrating: boolean
+  setCalibrating: (v: boolean) => void
+  /** the fix-a-chord sheet (M7) */
+  fixing: boolean
+  setFixing: (v: boolean) => void
+}>((set) => ({
   calibrating: false,
   setCalibrating: (calibrating) => set({ calibrating }),
+  fixing: false,
+  setFixing: (fixing) => set({ fixing }),
 }))

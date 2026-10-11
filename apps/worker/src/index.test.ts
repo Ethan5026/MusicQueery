@@ -206,6 +206,43 @@ test('the companion lists, marks and finishes requests; uploading the timeline c
   vi.unstubAllGlobals()
 })
 
+// ---------------------------------------------------------------- live timelines and fixes (M7)
+
+function put(env: Env, path: string, token: string | null, body: unknown) {
+  const headers: Record<string, string> = { Origin: ORIGIN, 'Content-Type': 'application/json' }
+  if (token) headers['X-Spotify-Token'] = token
+  return worker.fetch(new Request(`https://x.test${path}`, { method: 'PUT', headers, body: JSON.stringify(body) }), env)
+}
+
+test('the phone saves a live timeline apart from the analysed one', async () => {
+  mockSpotify()
+  const env = { ...makeEnv(), ALLOWED_SPOTIFY_USERS: 'ethan_gruening' }
+  const live = { ...timeline(QID), source: 'live' }
+  expect((await put(env, `/api/live/${QID}`, null, live)).status).toBe(401)
+  expect((await put(env, `/api/live/${QID}`, 'other', live)).status).toBe(401)
+  expect((await put(env, `/api/live/${QID}`, 'good', timeline(QID))).status).toBe(422) // analysed refused here
+  expect((await put(env, `/api/live/${QID}`, 'good', { ...live, id: ID })).status).toBe(422)
+  expect((await put(env, `/api/live/${QID}`, 'good', live)).status).toBe(200)
+  expect(await (await call(env, 'GET', `/api/live/${QID}`)).json()).toMatchObject({ source: 'live' })
+  // the analysed store is untouched
+  expect((await call(env, 'GET', `/api/timelines/${QID}`)).status).toBe(404)
+  vi.unstubAllGlobals()
+})
+
+test('chord fixes are stored per track and cleared by an empty list', async () => {
+  mockSpotify()
+  const env = { ...makeEnv(), ALLOWED_SPOTIFY_USERS: 'ethan_gruening' }
+  const edits = [{ at: '2026-10-11T12:00:00.000Z', startMs: 1000, endMs: 2000, symbol: 'Am7', prev: 'C' }]
+  expect((await call(env, 'GET', `/api/edits/${QID}`)).status).toBe(404)
+  expect((await put(env, `/api/edits/${QID}`, null, { edits })).status).toBe(401)
+  expect((await put(env, `/api/edits/${QID}`, 'good', { edits: [{ symbol: 'C' }] })).status).toBe(422)
+  expect((await put(env, `/api/edits/${QID}`, 'good', { edits })).status).toBe(200)
+  expect(await (await call(env, 'GET', `/api/edits/${QID}`)).json()).toEqual({ id: QID, edits })
+  expect((await put(env, `/api/edits/${QID}`, 'good', { edits: [] })).status).toBe(200)
+  expect((await call(env, 'GET', `/api/edits/${QID}`)).status).toBe(404)
+  vi.unstubAllGlobals()
+})
+
 // ---------------------------------------------------------------- playlist inbox (M5b)
 
 const PLAYLIST = '37i9dQZF1DXcBWIGoYBM5M'

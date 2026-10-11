@@ -9,8 +9,11 @@
 // M6: GET /api/status?ids= gives the analysis state of up to 10 Spotify tracks (On Spotify search results), and
 // GET /api/ireal/playlists[/:n] relays iReal Pro's official playlist page (one fixed URL, cached a day) so the
 // phone can import Jazz 1460 & co. with a tap; the page can't be fetched cross-origin from the PWA.
+// M7: live timelines (what the phone's mic heard, D-09) at /api/live/:id and chord fixes at /api/edits/:id. Both are
+// public to read; the phone writes them with its Spotify token (like the queue). A live timeline is kept apart from
+// the analysed one (`lv:` vs `tl:`), so a listen never replaces an analysis.
 
-import { Timeline } from '@mq/model'
+import { Timeline, TimelineEdits } from '@mq/model'
 
 export interface Env {
   ASSETS: Fetcher
@@ -28,6 +31,10 @@ const MAX_TIMELINE_BYTES = 4 * 1024 * 1024
 const TIMELINE_PREFIX = 'tl:'
 /** `spotify:track:<base62>` or `chart:<slug>`, the same ids Timeline.id allows. */
 const TIMELINE_ID = /^(?:spotify:track:[A-Za-z0-9]{22}|chart:[A-Za-z0-9._~-]{1,110})$/
+const LIVE_PREFIX = 'lv:'
+const EDITS_PREFIX = 'ed:'
+const MAX_LIVE_BYTES = 1024 * 1024
+const MAX_EDITS_BYTES = 128 * 1024
 const QUEUE_PREFIX = 'q:'
 const QUEUE_ID = /^spotify:track:[A-Za-z0-9]{22}$/
 const MAX_QUEUE = 200
@@ -373,6 +380,66 @@ export default {
       const pl = Number.isInteger(n) ? lists[n] : undefined
       if (!pl) return reply('not found', 404)
       return reply(pl.link, 200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'max-age=3600' })
+    }
+
+    // M7: live timelines and chord fixes, written by the phone (Spotify token) or the companion (secret)
+    const phoneOrSecret = async () =>
+      authorised || (await spotifyUser(req.headers.get('X-Spotify-Token'), env.ALLOWED_SPOTIFY_USERS)) !== null
+
+    if (url.pathname.startsWith('/api/live/')) {
+      const id = decodeURIComponent(url.pathname.slice('/api/live/'.length))
+      if (!QUEUE_ID.test(id)) return reply('bad id', 400)
+      const key = LIVE_PREFIX + id
+      if (req.method === 'GET') {
+        const text = await env.STORE.get(key)
+        if (text === null) return reply('not found', 404, { 'Cache-Control': 'no-store' })
+        return reply(text, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' })
+      }
+      if (req.method !== 'PUT') return reply('method', 405)
+      if (!(await phoneOrSecret())) return reply('unauthorised', 401)
+      const text = await readBody(req, MAX_LIVE_BYTES)
+      if (text === null) return reply('too large', 413)
+      let body: unknown
+      try {
+        body = JSON.parse(text)
+      } catch {
+        return reply('bad json', 400)
+      }
+      const parsed = Timeline.safeParse(body)
+      if (!parsed.success) return json({ error: 'invalid timeline', issues: parsed.error.issues.slice(0, 20) }, 422)
+      if (parsed.data.id !== id) return json({ error: `body id ${parsed.data.id} does not match ${id}` }, 422)
+      if (parsed.data.source !== 'live') return json({ error: 'only live timelines go here' }, 422)
+      await env.STORE.put(key, text, {
+        metadata: { source: 'live', createdAt: parsed.data.createdAt, chords: parsed.data.chords.length, bytes: text.length },
+      })
+      console.log(JSON.stringify({ live: id, chords: parsed.data.chords.length }))
+      return json({ id, chords: parsed.data.chords.length })
+    }
+
+    if (url.pathname.startsWith('/api/edits/')) {
+      const id = decodeURIComponent(url.pathname.slice('/api/edits/'.length))
+      if (!TIMELINE_ID.test(id)) return reply('bad id', 400)
+      const key = EDITS_PREFIX + id
+      if (req.method === 'GET') {
+        const text = await env.STORE.get(key)
+        if (text === null) return reply('not found', 404, { 'Cache-Control': 'no-store' })
+        return reply(text, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' })
+      }
+      if (req.method !== 'PUT') return reply('method', 405)
+      if (!(await phoneOrSecret())) return reply('unauthorised', 401)
+      const text = await readBody(req, MAX_EDITS_BYTES)
+      if (text === null) return reply('too large', 413)
+      let body: unknown
+      try {
+        body = JSON.parse(text)
+      } catch {
+        return reply('bad json', 400)
+      }
+      const parsed = TimelineEdits.safeParse((body as { edits?: unknown } | null)?.edits)
+      if (!parsed.success) return json({ error: 'invalid edits', issues: parsed.error.issues.slice(0, 20) }, 422)
+      if (parsed.data.length === 0) await env.STORE.delete(key)
+      else await env.STORE.put(key, JSON.stringify({ id, edits: parsed.data }))
+      return json({ id, edits: parsed.data.length })
     }
 
     if (url.pathname === '/api/timelines') {

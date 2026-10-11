@@ -1,12 +1,13 @@
 // IndexedDB (D-15): settings, cached timelines and track names, so the app opens offline; v2 (M6) adds `charts`
-// (iReal Pro imports, by chart id).
+// (iReal Pro imports, by chart id); v3 (M7) adds `edits` (chord fixes, by timeline id; live timelines go in
+// `timelines` under `live:<id>`).
 // A tiny promise wrapper; every call fails soft (private mode or blocked storage) and logs.
 import { log } from '../debug/log'
 
 const DB = 'musicqueery'
-const VERSION = 2
-export type StoreName = 'settings' | 'timelines' | 'tracks' | 'charts'
-const STORES: StoreName[] = ['settings', 'timelines', 'tracks', 'charts']
+const VERSION = 3
+export type StoreName = 'settings' | 'timelines' | 'tracks' | 'charts' | 'edits'
+const STORES: StoreName[] = ['settings', 'timelines', 'tracks', 'charts', 'edits']
 
 let opening: Promise<IDBDatabase | null> | null = null
 

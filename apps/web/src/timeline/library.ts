@@ -6,6 +6,7 @@ import { log } from '../debug/log'
 import { fetchTrack } from '../spotify/api'
 import { idbGet, idbKeys, idbSet } from '../store/idb'
 import { fetchTimelineById } from './fetch'
+import { LIVE_PREFIX, loadLive } from './live'
 
 export interface TrackMeta {
   id: string
@@ -52,7 +53,11 @@ export async function loadTimeline(id: string): Promise<LoadResult> {
     ...(r.status === 'ok' ? { chords: r.timeline.chords.length, bytes: r.bytes, ms: Math.round(r.ms) } : {}),
     ...(r.status === 'error' ? { err: r.message } : {}),
   })
-  if (r.status !== 'ok') return r
+  if (r.status !== 'ok') {
+    // no analysis (or offline): what the mic heard on an earlier play, if anything (M7)
+    const live = await loadLive(id)
+    return live ? { status: 'ok', timeline: live, from: 'cache' } : r
+  }
   await idbSet('timelines', id, r.timeline)
   return { status: 'ok', timeline: r.timeline, from: 'store' }
 }
@@ -91,7 +96,8 @@ export async function trackMeta(id: string): Promise<TrackMeta> {
 
 /** Seeds first, then every other cached timeline. */
 export async function recordedList(): Promise<TrackMeta[]> {
-  const ids = (await idbKeys('timelines')).filter((k) => !SEEDS.some((s) => s.id === k))
+  const keys = (await idbKeys('timelines')).map((k) => (k.startsWith(LIVE_PREFIX) ? k.slice(LIVE_PREFIX.length) : k))
+  const ids = [...new Set(keys)].filter((k) => !SEEDS.some((s) => s.id === k))
   return [...SEEDS, ...(await Promise.all(ids.map(trackMeta)))]
 }
 
