@@ -70,6 +70,17 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
 - **D-27** (M1, SP8) Screen Wake Lock works in the standalone PWA on iOS 27; no silent-video fallback.
 - **D-28** (M1) The user mostly plays through Fire TV devices (Spotify Connect). Sync acceptance tests (M5) run on a Fire TV.
 
+- **D-29** (M2) Chart v1 (`mq.chart/1`) holds bars in score order with repeat, ending, segno, coda, jump and meter markers;
+  `expandChart` produces playing order. Timeline v1 (`mq.timeline/1`) is in ms: beat grid, bars, chords, keys, tempo, `edits[]`.
+  Chord symbols are stored as `@mq/theory`'s canonical text (Unicode ♭/♯, e.g. `B♭m7`, `C7♯5`, `F/A`, `N.C.`) and notes are
+  spelled (E♭ ≠ D♯). Timeline `source` adds `exact` (charts, Generated and Drills tracks, D-12) to the three of D-04.
+  JSON Schema goes to `packages/model/schema/` for the Python companion.
+- **D-30** (M2, SP6) Our own `irealb://` parser in `packages/theory` (no `ireal-reader` dependency). The test corpus is iReal's
+  official Essential Playlists (Jazz 1460, today's Jazz 1300, plus Brazilian, Latin, Blues, Pop, Country), fetched with
+  `pnpm --filter @mq/theory corpus` into a gitignored folder. Anything not understood goes to `issues[]` and is never dropped silently.
+- **D-31** (M2) `theory.moment(timeline, positionMs, { instrument, lens })` returns everything a screen shows at one instant.
+  The per-timeline analysis (key regions by Viterbi over 24 keys, harmonic functions, ii–Vs) is computed once per timeline and cached.
+
 ## Pending
 
 (none)

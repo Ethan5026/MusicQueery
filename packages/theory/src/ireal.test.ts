@@ -1,5 +1,5 @@
 import { Chart } from '@mq/model'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 import { expandChart } from './chart'
 import { importPlaylist, keyOf, parsePlaylist, scramble, songToChart, unscramble } from './ireal'
@@ -106,6 +106,13 @@ test('N.C., slashes, invisible root, alternate chords, intro/verse marks, fermat
   expect(c.bars[4]).toMatchObject({ fermata: true, comment: 'Rubato' })
 })
 
+test('a meter change holds for the bars after it', () => {
+  // Blackbird's intro: 3/4, then 4/4 with four chords a bar
+  const c = chartOf('T34G, A-, G/B, |T44G XyQ|C, A7/C#, D, B7/D#, |T24D XyQZ')
+  expect(bars(c)).toEqual(['G:1 Am:1 G/B:1', 'G:4', 'C:1 A7/C♯:1 D:1 B7/D♯:1', 'D:2'])
+  expect(c.bars.map((b) => b.meter?.num)).toEqual([undefined, 4, undefined, 2])
+})
+
 test('unknown chords are reported, not dropped silently', () => {
   const pl = parsePlaylist(link([{ title: 'Bad', music: '[C^7XyQ|C7q XyQZ' }]))
   const { issues } = songToChart(pl.songs[0]!)
@@ -118,24 +125,32 @@ test('importPlaylist handles several songs', () => {
 })
 
 // ---------------------------------------------------------------- corpus (not in git)
+// iReal's Essential Playlists (Jazz 1460 — the Jazz 1300 grown — Brazilian, Latin, Blues, Pop, Country),
+// saved as irealb:// links under packages/theory/corpus/. See handoffs/M2-theory.md.
 
-const CORPUS = new URL('../corpus/jazz1300.txt', import.meta.url)
+const CORPUS = new URL('../corpus/', import.meta.url)
+// Quirks in the charts themselves, imported with a fallback (an even split of the bar)
+const KNOWN = ['Casa Forte: Casa Forte: 3 chords in a 2-beat bar'] // last bar `ppD-` in 2/2
+const lists = existsSync(CORPUS) ? readdirSync(CORPUS).filter((f) => f.endsWith('.txt')) : []
 
-describe.skipIf(!existsSync(CORPUS))('Jazz 1300 corpus', () => {
-  let cached: ReturnType<typeof importPlaylist>['results'] | null = null
-  const corpus = (): ReturnType<typeof importPlaylist>['results'] => (cached ??= importPlaylist(readFileSync(CORPUS, 'utf8')).results)
+describe.skipIf(lists.length === 0).each(lists)('corpus %s', (file) => {
+  let cached: ReturnType<typeof importPlaylist> | null = null
+  const corpus = (): ReturnType<typeof importPlaylist> => (cached ??= importPlaylist(readFileSync(new URL(file, CORPUS), 'utf8')))
   test('has the whole playlist', () => {
-    const results = corpus()
-    expect(results.length).toBeGreaterThan(1000)
+    const { name, results } = corpus()
+    const n = Number(/\d+$/.exec(name ?? '')?.[0] ?? 0)
+    expect(results.length).toBeGreaterThanOrEqual(n)
   })
   test('every chord parses', () => {
-    const results = corpus()
-    const bad = results.flatMap((r) => r.issues.filter((i) => i.startsWith('unparsed chord')).map((i) => `${r.chart.title}: ${i}`))
+    const bad = corpus().results.flatMap((r) => r.issues.filter((i) => i.startsWith('unparsed chord')).map((i) => `${r.chart.title}: ${i}`))
     expect(bad).toEqual([])
   })
+  test('nothing else is left unread', () => {
+    const bad = corpus().results.flatMap((r) => r.issues.map((i) => `${r.chart.title}: ${i}`))
+    expect(bad.filter((i) => !KNOWN.includes(i))).toEqual([])
+  })
   test('every chart is schema-valid and expands', () => {
-    const results = corpus()
-    for (const r of results) {
+    for (const r of corpus().results) {
       Chart.parse(r.chart)
       expect(expandChart(r.chart).length).toBeGreaterThan(0)
     }

@@ -200,7 +200,8 @@ export function songToChart(song: IrealSong, playlist?: string): ImportResult {
   let carryComments: string[] = []
   let small = false
   let lastChord: string | null = null // iReal text of the last real chord (root + quality)
-  let meter: Meter | null = null
+  let meter: Meter | null = null // the chart's opening meter
+  let running: Meter | null = null // the meter in force, in written order
   let pendingR: ChordSlot[] | null = null
   let lastEnding = 0
   const qBars: number[] = []
@@ -217,7 +218,8 @@ export function songToChart(song: IrealSong, playlist?: string): ImportResult {
     const chords = b.cells.filter((c) => c.kind === 'chord')
     let slots: ChordSlot[] | null = null
     let simile = false
-    const beatsPerBar = (b.attrs.meter ?? meter ?? { num: 4 }).num
+    if (b.attrs.meter) running = b.attrs.meter
+    const beatsPerBar = (running ?? { num: 4 }).num
     if (b.cells.some((c) => c.kind === 'x')) {
       slots = done[done.length - 1]?.chords ?? null
       simile = true
