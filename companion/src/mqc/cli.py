@@ -54,7 +54,11 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--idle-minutes", type=float, default=10, help="nothing played on any device for this long")
     s.add_argument("--interval", type=float, default=60, help="seconds between queue checks")
     s.add_argument("--once", action="store_true", help="work through what can be done now, then exit")
+    s.add_argument("--inbox-minutes", type=float, default=10, help="minutes between checks of the inbox playlist")
     sub.add_parser("queue", help="show the analysis queue")
+    s = sub.add_parser("inbox", help="the playlist inbox (M5b): songs added to it are queued for analysis")
+    s.add_argument("action", nargs="?", default="show", choices=["show", "set", "check", "clear"])
+    s.add_argument("playlist", nargs="?", help="for `set`: a Spotify playlist link, URI or id")
 
     s = sub.add_parser("get", help="fetch a timeline from the store")
     s.add_argument("id")
@@ -205,7 +209,7 @@ def cmd_watch(a) -> int:
     from .watch import watch
 
     try:
-        return watch(a.idle_minutes, a.interval, a.once)
+        return watch(a.idle_minutes, a.interval, a.once, a.inbox_minutes)
     except KeyboardInterrupt:
         return 0
 
@@ -216,6 +220,52 @@ def cmd_queue(a) -> None:
     for q in Store().queue():
         err = f" ({q['error']})" if q.get("error") else ""
         print(f"{q['state']:8} {q['id']}  {q.get('title', '')} — {q.get('artist', '')}  asked {q['requestedAt']}{err}")
+
+
+def cmd_inbox(a) -> int:
+    from .inbox import Inbox, parse_playlist_id
+    from .spotify import RateLimited, Spotify, SpotifyError
+    from .store import Store
+
+    store = Store()
+    s = store.s
+    if a.action == "set":
+        if not a.playlist:
+            print("usage: mqc inbox set <playlist link>")
+            return 2
+        s.inbox_playlist, s.inbox_name = parse_playlist_id(a.playlist), ""
+        try:
+            s.inbox_name = Spotify().playlist_snapshot(s.inbox_playlist).get("name") or ""
+        except RateLimited as e:
+            h = e.retry_after_s / 3600
+            print(f"saved, but Spotify is refusing playlist reads for {h:.1f} h (D-35); `mqc watch` catches up then")
+        except SpotifyError as e:
+            print(f"saved, but the playlist couldn't be read: {e}")
+        s.save()
+        print(f"inbox: {s.inbox_name or '(name unknown)'} ({s.inbox_playlist}). `mqc watch` checks it every 10 min.")
+        return 0
+    if a.action == "clear":
+        s.inbox_playlist = s.inbox_name = ""
+        s.save()
+        store.inbox_delete()
+        print("inbox cleared (timelines and queued requests are kept)")
+        return 0
+    if not s.inbox_playlist:
+        print("no inbox playlist: `mqc inbox set <playlist link>`")
+        return 1
+    if a.action == "check":
+        Inbox(s.inbox_playlist, Spotify(), store, s.inbox_name).check(force=True)
+    doc = store.inbox_get()
+    if not doc:
+        print(f"inbox {s.inbox_name or s.inbox_playlist}: not read yet")
+        return 0
+    print(f"inbox {doc.get('name') or doc['playlistId']}: {len(doc['tracks'])} songs, updated {doc['updatedAt']}")
+    if doc.get("blockedUntil"):
+        print(f"  Spotify refuses playlist reads until {doc['blockedUntil']}")
+    for t in doc["tracks"]:
+        err = f" ({t['error']})" if t.get("error") else ""
+        print(f"  {t['state']:8} {t.get('title', '')} — {t.get('artist', '')}{err}")
+    return 0
 
 
 def cmd_chart_index(a) -> None:

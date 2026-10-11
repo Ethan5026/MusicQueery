@@ -201,3 +201,47 @@ test('calibrate from the sync badge: nudges are saved for this speaker and survi
   await expect(page.locator('section', { hasText: 'Speakers' })).toContainText('Living Room TV')
   await expect(page.locator('section', { hasText: 'Speakers' })).toContainText('+20 ms')
 })
+
+test('Tracks lists the playlist inbox with each song’s state; a failed one can be retried, an analysed one opens', async ({ page }) => {
+  const FAIL = 'spotify:track:1111111111111111111111'
+  await page.context().route('**/api/inbox', (r) =>
+    r.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        playlistId: '37i9dQZF1DXcBWIGoYBM5M',
+        name: 'Practice inbox',
+        updatedAt: '2026-10-11T12:00:00.000Z',
+        tracks: [
+          { id: `spotify:track:${LET_IT_BE_ID}`, title: 'Let It Be', artist: 'The Beatles', state: 'analysed' },
+          { id: `spotify:track:${UNKNOWN_ID}`, title: 'Unknown Song', artist: 'Nobody', state: 'working' },
+          { id: FAIL, title: 'Broken Song', artist: 'Somebody', state: 'failed', error: 'capture failed' },
+          { id: 'spotify:track:2222222222222222222222', title: 'Just Added', artist: 'New', state: 'new' },
+        ],
+      }),
+    }),
+  )
+  await page.context().route(`**/api/queue/${FAIL}`, (r) => {
+    if (r.request().method() === 'GET')
+      return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: FAIL, state: 'failed', error: 'capture failed' }) })
+    queued.push({ token: r.request().headers()['x-spotify-token'] ?? null, body: r.request().postDataJSON() })
+    return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: FAIL, state: 'queued', requestedAt: new Date().toISOString() }) })
+  })
+  await page.goto('/#tracks')
+  const inbox = page.getByTestId('inbox')
+  await expect(inbox.locator('h2')).toHaveText('Inbox · Practice inbox')
+  await expect(inbox.locator('.tcount')).toHaveText('1 of 4 analysed')
+  await expect(inbox.locator('.trow .src')).toHaveText(['Analysed', 'Working', 'Failed', 'Waiting'])
+  // inbox songs are not listed again under "On this phone"
+  await expect(page.getByRole('heading', { name: 'On this phone' })).toBeVisible()
+  await expect(page.locator('.trow .tt', { hasText: 'Let It Be' })).toHaveCount(1)
+
+  await inbox.locator('.trow', { hasText: 'Broken Song' }).click()
+  await expect(page.getByTestId('analyse')).toContainText('The last try failed: capture failed')
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: 'test-results/shot-inbox.png', fullPage: true })
+  await page.getByRole('button', { name: 'Try again on the PC' }).click()
+  await expect(inbox.locator('.trow', { hasText: 'Broken Song' }).locator('.src')).toHaveText('Queued')
+  expect(queued).toEqual([{ token: 'x', body: { title: 'Broken Song', artist: 'Somebody' } }])
+
+  await inbox.locator('.trow', { hasText: 'Let It Be' }).click()
+  await expect(hero(page)).toBeVisible()
+})

@@ -37,6 +37,8 @@ class Settings:
     api_url: str = DEFAULT_API
     api_secret: str = ""
     device_name: str = ""  # Spotify Connect name of this PC; defaults to the computer name
+    inbox_playlist: str = ""  # M5b: Spotify playlist id whose songs `mqc watch` queues (`mqc inbox set`)
+    inbox_name: str = ""
 
     @staticmethod
     def path() -> Path:

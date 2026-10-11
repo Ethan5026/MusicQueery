@@ -30,6 +30,14 @@ class SpotifyError(RuntimeError):
     pass
 
 
+class RateLimited(SpotifyError):
+    """A cooldown too long to wait out, e.g. the day-long development-mode quota on playlist reads (D-35)."""
+
+    def __init__(self, msg: str, retry_after_s: float) -> None:
+        super().__init__(msg)
+        self.retry_after_s = retry_after_s
+
+
 def login(open_browser: bool = True) -> None:
     """Authorization Code + PKCE with a one-shot local server on the redirect port."""
     verifier = secrets.token_urlsafe(64)
@@ -141,7 +149,7 @@ class Spotify:
             if r.status_code == 429 or r.status_code >= 500:
                 wait = float(r.headers.get("Retry-After", 1 + attempt))
                 if wait > 30:  # a long cooldown would silently stall an unattended run
-                    raise SpotifyError(f"{method} {path}: rate limited for {wait:.0f} s")
+                    raise RateLimited(f"{method} {path}: rate limited for {wait:.0f} s", wait)
                 time.sleep(wait)
                 continue
             return r
@@ -187,13 +195,31 @@ class Spotify:
     def track(self, track_id: str) -> dict[str, Any]:
         return self.get(f"/tracks/{track_id}")
 
+    def playlist_snapshot(self, playlist_id: str) -> dict[str, Any]:
+        """`snapshot_id` and `name` only: one light request that changes whenever the playlist does (M5b)."""
+        return self.get(f"/playlists/{playlist_id}", fields="snapshot_id,name")
+
     def playlist_tracks(self, playlist_id: str) -> list[dict[str, Any]]:
-        out, path = [], f"/playlists/{playlist_id}/tracks"
-        params: dict[str, Any] = {"limit": 100, "additional_types": "track"}
-        while path:
-            page = self.get(path, **params)
-            out += [i["track"] for i in page["items"] if i.get("track") and i["track"].get("id")]
-            path, params = (page["next"].replace(API, "") if page.get("next") else ""), {}
+        """The playlist's tracks (no episodes or local files). Spotify renamed `/tracks` to `/items` (and `track` to
+        `item` in each entry) in 2026; both are accepted."""
+        out: list[dict[str, Any]] = []
+        for endpoint in ("items", "tracks"):
+            path, params = f"/playlists/{playlist_id}/{endpoint}", {"limit": 100, "additional_types": "track"}
+            r = self.call("GET", path, params=params)
+            if r.status_code == 404 and endpoint == "items":
+                continue
+            while True:
+                if r.status_code != 200:
+                    raise SpotifyError(f"GET {path}: {r.status_code} {r.text}")
+                page = r.json()
+                for i in page["items"]:
+                    t = i.get("item") or i.get("track")
+                    if t and t.get("id") and t.get("type", "track") == "track":
+                        out.append(t)
+                if not page.get("next"):
+                    return out
+                path = page["next"].replace(API, "")
+                r = self.call("GET", path)
         return out
 
     PLAY_METHODS = ("album-uri", "album-position", "queue")

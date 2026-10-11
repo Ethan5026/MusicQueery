@@ -1,5 +1,5 @@
 // "Analyse on the PC": queue a Spotify track for the companion (timeline/queue.ts) and show where it stands.
-import { useEffect, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import { useApp } from '../services'
 import { type QueueStatus, queueStatus, requestAnalysis } from '../timeline/queue'
 
@@ -8,7 +8,20 @@ const when = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
 }
 
-export function AnalyseButton({ id, title, artist, onDone }: { id: string; title?: string; artist?: string; onDone?: () => void }) {
+export function AnalyseButton({
+  id,
+  title,
+  artist,
+  onDone,
+  onStatus,
+}: {
+  id: string
+  title?: string
+  artist?: string
+  onDone?: () => void
+  /** Every status it learns (the Tracks inbox keeps its row in step). */
+  onStatus?: (s: QueueStatus) => void
+}) {
   const authed = useApp((s) => s.authed)
   const [st, setSt] = useState<QueueStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -19,9 +32,13 @@ export function AnalyseButton({ id, title, artist, onDone }: { id: string; title
       live = false
     }
   }, [id])
+  const tell = useEffectEvent((s: QueueStatus) => {
+    onStatus?.(s)
+    if (s.state === 'done') onDone?.()
+  })
   useEffect(() => {
-    if (st?.state === 'done') onDone?.()
-  }, [st, onDone])
+    if (st) tell(st)
+  }, [st])
 
   const ask = async () => {
     setBusy(true)

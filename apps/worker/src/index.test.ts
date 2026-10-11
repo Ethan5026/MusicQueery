@@ -205,3 +205,60 @@ test('the companion lists, marks and finishes requests; uploading the timeline c
   expect(await (await phone(env, 'POST', 'good', {})).json()).toEqual({ id: QID, state: 'done' })
   vi.unstubAllGlobals()
 })
+
+// ---------------------------------------------------------------- playlist inbox (M5b)
+
+const PLAYLIST = '37i9dQZF1DXcBWIGoYBM5M'
+const NEW_ID = 'spotify:track:0000000000000000000000'
+const FAIL_ID = 'spotify:track:1111111111111111111111'
+
+test('the companion mirrors the inbox; the phone reads it with each song’s state', async () => {
+  const env = makeEnv()
+  expect((await call(env, 'GET', '/api/inbox')).status).toBe(404)
+  const doc = {
+    playlistId: PLAYLIST,
+    name: 'MusicQueery inbox',
+    snapshotId: 'snap1',
+    tracks: [
+      { id: ID, title: 'Analysed one', artist: 'A' },
+      { id: QID, title: 'Let It Be', artist: 'The Beatles' },
+      { id: NEW_ID, title: 'New one' },
+      { id: FAIL_ID, title: 'Broken' },
+      { id: QID, title: 'Let It Be (added twice)' },
+    ],
+  }
+  expect((await call(env, 'PUT', '/api/inbox', { body: doc })).status).toBe(401)
+  const put = await call(env, 'PUT', '/api/inbox', { body: doc, auth: SECRET })
+  expect(await put.json()).toMatchObject({ playlistId: PLAYLIST, tracks: 4 })
+
+  await call(env, 'PUT', `/api/timelines/${ID}`, { body: timeline(ID), auth: SECRET })
+  await call(env, 'POST', `/api/queue/${QID}`, { body: { title: 'Let It Be' }, auth: SECRET })
+  await call(env, 'POST', `/api/queue/${FAIL_ID}`, { body: {}, auth: SECRET })
+  await call(env, 'PUT', `/api/queue/${FAIL_ID}`, { body: { state: 'failed', error: 'capture failed' }, auth: SECRET })
+
+  const got = (await (await call(env, 'GET', '/api/inbox')).json()) as { name: string; tracks: { id: string; state: string; error?: string }[] }
+  expect(got.name).toBe('MusicQueery inbox')
+  expect(got.tracks.map((t) => [t.id, t.state])).toEqual([
+    [ID, 'analysed'],
+    [QID, 'queued'],
+    [NEW_ID, 'new'],
+    [FAIL_ID, 'failed'],
+  ])
+  expect(got.tracks[3]!.error).toBe('capture failed')
+
+  // a quota block is recorded with the tracks it last saw
+  await call(env, 'PUT', '/api/inbox', { body: { ...doc, blockedUntil: '2026-10-12T10:00:00.000Z' }, auth: SECRET })
+  expect(await (await call(env, 'GET', '/api/inbox')).json()).toMatchObject({ blockedUntil: '2026-10-12T10:00:00.000Z' })
+  expect((await call(env, 'DELETE', '/api/inbox', { auth: SECRET })).status).toBe(204)
+  expect((await call(env, 'GET', '/api/inbox')).status).toBe(404)
+})
+
+test('a bad inbox is refused', async () => {
+  const env = makeEnv()
+  const put = (body: unknown) => call(env, 'PUT', '/api/inbox', { body, auth: SECRET })
+  expect((await put({ playlistId: 'nope', tracks: [] })).status).toBe(422)
+  expect((await put({ playlistId: PLAYLIST })).status).toBe(422)
+  expect((await put({ playlistId: PLAYLIST, tracks: [{ id: 'spotify:episode:1111111111111111111111' }] })).status).toBe(422)
+  expect((await put({ playlistId: PLAYLIST, tracks: Array.from({ length: 301 }, () => ({ id: ID })) })).status).toBe(422)
+  expect((await put({ playlistId: PLAYLIST, tracks: [] })).status).toBe(200)
+})

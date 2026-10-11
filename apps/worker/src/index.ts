@@ -3,6 +3,9 @@
 // M3: the timeline store (D-17, D-32). GET /api/timelines/:id is public; writes need `Authorization: Bearer <API_SECRET>`.
 // M5: the analysis queue. The phone asks for a track to be analysed (POST /api/queue/:id with its Spotify token, checked
 // against ALLOWED_SPOTIFY_USERS); the companion's `mqc watch` lists, updates and deletes requests with the secret.
+// M5b: the playlist inbox. `mqc watch` mirrors the inbox playlist here (PUT /api/inbox, secret) after queueing its new
+// songs; the phone reads GET /api/inbox (public, like timelines) with each song's state, so it never reads playlists
+// from Spotify itself (D-35: playlist reads are the ones that get quota-blocked).
 
 import { Timeline } from '@mq/model'
 
@@ -25,6 +28,11 @@ const TIMELINE_ID = /^(?:spotify:track:[A-Za-z0-9]{22}|chart:[A-Za-z0-9._~-]{1,1
 const QUEUE_PREFIX = 'q:'
 const QUEUE_ID = /^spotify:track:[A-Za-z0-9]{22}$/
 const MAX_QUEUE = 200
+const INBOX_KEY = 'inbox'
+/** Each listed song costs two KV reads per GET, and an invocation may make 1000. */
+const MAX_INBOX = 300
+const MAX_INBOX_BYTES = 128 * 1024
+const PLAYLIST_ID = /^[A-Za-z0-9]{22}$/
 
 export type QueueState = 'queued' | 'working' | 'failed'
 
@@ -36,6 +44,54 @@ export interface QueueItem {
   error?: string
   requestedAt: string
   updatedAt: string
+}
+
+export interface InboxTrack {
+  id: string
+  title?: string
+  artist?: string
+}
+
+/** The inbox playlist as the companion last read it. */
+export interface InboxDoc {
+  playlistId: string
+  name?: string
+  snapshotId?: string
+  /** When the companion last changed this (a new snapshot, or a quota block). */
+  updatedAt: string
+  /** Spotify is refusing playlist reads until then (D-35); songs added meanwhile are picked up afterwards. */
+  blockedUntil?: string
+  tracks: InboxTrack[]
+}
+
+export type InboxState = 'analysed' | QueueState | 'new'
+
+/** Validates a PUT /api/inbox body; a string is the reason it was refused. */
+export function parseInbox(body: unknown, now: string): InboxDoc | string {
+  if (typeof body !== 'object' || body === null) return 'not an object'
+  const b = body as Record<string, unknown>
+  if (typeof b.playlistId !== 'string' || !PLAYLIST_ID.test(b.playlistId)) return 'bad playlistId'
+  if (!Array.isArray(b.tracks)) return 'tracks must be an array'
+  if (b.tracks.length > MAX_INBOX) return `more than ${MAX_INBOX} tracks`
+  const tracks: InboxTrack[] = []
+  for (const t of b.tracks as Record<string, unknown>[]) {
+    if (typeof t?.id !== 'string' || !QUEUE_ID.test(t.id)) return `bad track id ${String(t?.id)}`
+    if (tracks.some((x) => x.id === t.id)) continue // a song added twice is listed once
+    const title = clip(t.title)
+    const artist = clip(t.artist)
+    tracks.push({ id: t.id, ...(title ? { title } : {}), ...(artist ? { artist } : {}) })
+  }
+  const name = clip(b.name)
+  const snapshotId = clip(b.snapshotId, 100)
+  const blocked = typeof b.blockedUntil === 'string' && !Number.isNaN(Date.parse(b.blockedUntil)) ? b.blockedUntil : undefined
+  return {
+    playlistId: b.playlistId,
+    ...(name ? { name } : {}),
+    ...(snapshotId ? { snapshotId } : {}),
+    updatedAt: now,
+    ...(blocked ? { blockedUntil: blocked } : {}),
+    tracks,
+  }
 }
 
 /** The Spotify user behind `token`, if they are on the allow-list. */
@@ -208,6 +264,45 @@ export default {
         else delete item.error
         await env.STORE.put(key, JSON.stringify(item))
         return json(item)
+      }
+      return reply('method', 405)
+    }
+
+    if (url.pathname === '/api/inbox') {
+      if (req.method === 'GET') {
+        const v = await env.STORE.get(INBOX_KEY)
+        if (v === null) return reply('no inbox', 404, { 'Cache-Control': 'no-store' })
+        const doc = JSON.parse(v) as InboxDoc
+        const tracks = await Promise.all(
+          doc.tracks.map(async (t) => {
+            if ((await env.STORE.get(TIMELINE_PREFIX + t.id)) !== null) return { ...t, state: 'analysed' as InboxState }
+            const q = await env.STORE.get(QUEUE_PREFIX + t.id)
+            if (q === null) return { ...t, state: 'new' as InboxState }
+            const item = JSON.parse(q) as QueueItem
+            return { ...t, state: item.state as InboxState, ...(item.error ? { error: item.error } : {}) }
+          }),
+        )
+        return reply(JSON.stringify({ ...doc, tracks }), 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      }
+      if (!authorised) return reply('unauthorised', 401)
+      if (req.method === 'DELETE') {
+        await env.STORE.delete(INBOX_KEY)
+        return reply(null, 204)
+      }
+      if (req.method === 'PUT') {
+        const text = await readBody(req, MAX_INBOX_BYTES)
+        if (text === null) return reply('too large', 413)
+        let body: unknown
+        try {
+          body = JSON.parse(text)
+        } catch {
+          return reply('bad json', 400)
+        }
+        const doc = parseInbox(body, new Date().toISOString())
+        if (typeof doc === 'string') return json({ error: doc }, 422)
+        await env.STORE.put(INBOX_KEY, JSON.stringify(doc))
+        console.log(JSON.stringify({ inbox: doc.playlistId, tracks: doc.tracks.length, blockedUntil: doc.blockedUntil }))
+        return json({ playlistId: doc.playlistId, tracks: doc.tracks.length, updatedAt: doc.updatedAt })
       }
       return reply('method', 405)
     }

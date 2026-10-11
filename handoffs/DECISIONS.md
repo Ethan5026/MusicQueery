@@ -180,6 +180,23 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   Playwright stops routing fetches once a service worker controls the page (the smoke suite's offline test still covers the SW).
   A test fails if portrait Stand needs scrolling in any Play mode (it was already 6 px over before M5; the Play card was tightened).
 
+- **D-54** (M5b, departs from the M5b plan's phone-side read) Playlist inbox. `mqc inbox set <link>` saves the playlist id in the
+  companion config. `mqc watch` asks for `GET /playlists/{id}?fields=snapshot_id,name` every `--inbox-minutes` (10) and reads the
+  tracks (`/items`, falling back to `/tracks`) only when the snapshot changed; it queues every song not stored and not in the queue
+  in any state (`POST /api/queue/:id` with the secret; a failed one is retried from the phone, not on every playlist edit), then
+  mirrors the playlist to the Worker: `PUT /api/inbox` (secret; ≤ 300 songs, duplicates listed once). `GET /api/inbox` is public,
+  like timelines, and adds each song's state (analysed | queued | working | failed | new) from the `tl:`/`q:` keys, 2 KV reads a
+  song. The phone lists that mirror and never reads playlists from Spotify, so it needs no new scope or re-login and adds nothing
+  to the quota that gets blocked (D-35). The cost: a song shows on the phone only after the PC has seen it (≤ 10 min, PC on).
+  A restarted watcher takes the last snapshot from the mirror (one light request, no full read).
+- **D-55** (M5b) Quota blocks on playlist reads (`RateLimited`, Retry-After > 30 s) make the inbox wait out the Retry-After (at least
+  the 10 min), log the next try, and write `blockedUntil` into the mirror with the last good list; the phone says so until the time
+  passes, and the first successful read clears it. Seen on 2026-10-11: `/me/playlists` refused for 29 464 s (≈ 8 h).
+- **D-56** (M5b) `mqc watch` lists the queue (a KV list, 1000 a day on Cloudflare's free plan) only when needed: every loop while
+  Spotify is idle and there is work, every 3 min while idle with nothing to do, every 10 min while Spotify plays; and right after
+  the inbox queued something. What the watcher just finished overrides the lagging list for 2 min (done → dropped, failed stays
+  failed), so a KV echo can't start the same analysis twice.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
