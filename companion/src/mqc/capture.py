@@ -140,26 +140,37 @@ def find_pc_device(sp: Spotify, name: str = "") -> dict:
     raise CaptureError(f"no Spotify desktop device named {want!r}; devices: {[d['name'] for d in devs]}")
 
 
-def _start(sp: Spotify, track_id: str, device_id: str, log=print, timeout_s: float = 12) -> None:
-    """Sends play and waits until the player confirms this track is playing near its start. The desktop client
-    applies remote commands late and sometimes not at all (D-33), so the command is resent once."""
-    sp.play(track_id, device_id, 0)
-    t0 = time.time()
-    resent = False
-    while time.time() - t0 < timeout_s:
-        time.sleep(0.4)
-        st = sp.player()
-        if st and st.track_id == track_id and st.is_playing and st.progress_ms < 8000:
-            sp.set_repeat("off", device_id)
-            return
-        if not resent and time.time() - t0 > 4:
-            log(f"  player shows {st.track_id if st else None}, resending play")
-            sp.play(track_id, device_id, 0)
-            resent = True
-    raise CaptureError("Spotify did not start the track")
+def _start(sp: Spotify, track_id: str, device_id: str, log=print, per_try_s: float = 5) -> None:
+    """Starts the track and waits until the player confirms it is playing near its start. The desktop client applies
+    remote commands late or not at all, and sometimes starts the wrong album track (D-33), so each start method in
+    `Spotify.PLAY_METHODS` gets one try."""
+    st = None
+    for method in sp.PLAY_METHODS:
+        sp.play(track_id, device_id, 0, method=method)
+        t0 = time.time()
+        while time.time() - t0 < per_try_s:
+            time.sleep(0.4)
+            st = sp.player()
+            if st and st.track_id == track_id and st.is_playing and st.progress_ms < 8000:
+                if method != "queue":
+                    sp.set_repeat("off", device_id)
+                return
+        log(f"  start by {method}: player shows {st.track_id if st else None}, trying the next method")
+    raise CaptureError(f"Spotify did not start the track (last seen {st.track_id if st else None})")
 
 
-def capture_track(
+def capture_track(sp: Spotify, track_id: str, work: Path, *args, **kwargs) -> Capture:
+    """Plays one track from 0 on this PC's Spotify app and captures it (see `_capture_track`). On any failure the
+    partial audio is deleted at once (D-18), so an unattended run never leaves recordings behind."""
+    try:
+        return _capture_track(sp, track_id, work, *args, **kwargs)
+    except BaseException:
+        for p in (work / f"{track_id}.wav", work / f"{track_id}.wav.qpc.csv"):
+            p.unlink(missing_ok=True)
+        raise
+
+
+def _capture_track(
     sp: Spotify,
     track_id: str,
     work: Path,

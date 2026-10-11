@@ -68,7 +68,9 @@ def regularise(b: Beats, glitch: float = 0.6) -> Beats:
     dbs = np.array(db)
     med = float(np.median(np.diff(dbs)))
     edges = np.append(dbs, dbs[-1] + med)
-    counts = [int(((b.beats >= a - 0.03) & (b.beats < e - 0.03)).sum()) for a, e in zip(edges[:-1], edges[1:], strict=True)]
+    counts = [
+        int(((b.beats >= a - 0.03) & (b.beats < e - 0.03)).sum()) for a, e in zip(edges[:-1], edges[1:], strict=True)
+    ]
     common = Counter(c for c in counts if 2 <= c <= 8)
     n = common.most_common(1)[0][0] if common else 4
     if any(c == 2 * n for c in common) and common[2 * n] >= 0.1 * len(counts):
@@ -263,7 +265,9 @@ def _root(label: str) -> int | str:
     return int(mir_eval.chord.pitch_class_to_semitone(label.split(":")[0].split("/")[0]))
 
 
-def vote(per: dict[str, Segments], beats: np.ndarray, end_s: float, weights: dict[str, float] = VOTE_WEIGHTS) -> Segments:
+def vote(
+    per: dict[str, Segments], beats: np.ndarray, end_s: float, weights: dict[str, float] = VOTE_WEIGHTS
+) -> Segments:
     """Per beat, the root most recognisers agree on (weighted); its label comes from the heaviest recogniser
     that chose that root, so BTC's large vocabulary supplies the quality whenever it agrees."""
     synced = {r: beat_sync(per[r], beats, end_s) for r in weights}
@@ -461,7 +465,9 @@ def bar_features(audio: np.ndarray, sr: int, downbeats: np.ndarray, segs: Segmen
     return np.array(feats)
 
 
-def find_sections(feats: np.ndarray, kernel: int = 4, min_len: int = 4, same: float = 0.8) -> list[tuple[int, int, str]]:
+def find_sections(
+    feats: np.ndarray, kernel: int = 4, min_len: int = 4, same: float = 0.8
+) -> list[tuple[int, int, str]]:
     """Segments [start bar, end bar) with labels. Boundaries are peaks of a checkerboard novelty curve over the
     bar self-similarity matrix (at least `min_len` bars apart, phrase lengths of 4 preferred); segments whose
     lagged similarity to an earlier one is >= `same` share its letter. An unrepeated first/last segment is

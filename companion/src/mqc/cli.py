@@ -31,6 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--recogniser", default=None)
     s.add_argument("--no-upload", action="store_true")
     s.add_argument("--skip-existing", action="store_true", help="skip tracks already in the store")
+    s.add_argument("--first", type=int, default=0, help="for a playlist: only its first N tracks")
 
     s = sub.add_parser("analyse-saved", help="analyse captured truth audio (no replay) and upload")
     s.add_argument("names", nargs="*")
@@ -135,18 +136,25 @@ def cmd_align_check(a) -> None:
         hop = sr // 200  # 5 ms frames
         env = np.array([x[i : i + hop].max() for i in range(0, len(x) - hop, hop)])
         db = 20 * np.log10(env + 1e-9)
-        rel = lambda i: i * 5 - cap.offset_ms  # noqa: E731  frame index → track ms
+        off = cap.offset_ms
+
+        def rel(i: int, off: float = off) -> float:  # 5 ms frame index → track ms
+            return i * 5 - off
+
         loud = np.flatnonzero(db > -50)
         onsets = [i for i in range(1, len(db)) if db[i] > -30 and db[i] - db[i - 1] > 12]
-        print(f"{sp.track(tid)['name'][:40]:40} offset {cap.offset_ms:6.0f} (MAD {cap.offset_spread_ms:4.1f})  "
-              f"first > -50 dB at track {rel(loud[0]) if len(loud) else None} ms; "
-              f"onsets at track ms {[round(rel(i)) for i in onsets[:8]]}")
+        print(
+            f"{sp.track(tid)['name'][:40]:40} offset {cap.offset_ms:6.0f} (MAD {cap.offset_spread_ms:4.1f})  "
+            f"first > -50 dB at track {rel(loud[0]) if len(loud) else None} ms; "
+            f"onsets at track ms {[round(rel(i)) for i in onsets[:8]]}"
+        )
         cap.delete()
 
 
 def cmd_analyse(a) -> int:
+    from .capture import find_pc_device
     from .pipeline import DEFAULT_RECOGNISER, analyse_track, read_track_list
-    from .spotify import Spotify, parse_track_id
+    from .spotify import Spotify, SpotifyError, parse_track_id
     from .store import Store
 
     ids: list[str] = []
@@ -154,9 +162,14 @@ def cmd_analyse(a) -> int:
         if t.startswith("@"):
             ids += [parse_track_id(x) for x in read_track_list(Path(t[1:]))]
         elif "playlist" in t:
-            ids += [
-                x["id"] for x in Spotify().playlist_tracks(t.rstrip("/").split("/")[-1].split(":")[-1].split("?")[0])
-            ]
+            pid = t.rstrip("/").split("/")[-1].split(":")[-1].split("?")[0]
+            sp0 = Spotify()
+            try:
+                found = [x["id"] for x in sp0.playlist_tracks(pid)]
+                ids += found[: a.first] if a.first else found
+            except SpotifyError as e:  # development-mode quota on playlist reads (D-35)
+                print(f"playlist read failed ({e}); finding tracks by playing positions instead")
+                ids += sp0.playlist_ids_by_playing(pid, find_pc_device(sp0)["id"], a.first or 10)
         else:
             ids.append(parse_track_id(t))
     sp = Spotify()
@@ -265,17 +278,31 @@ def cmd_bakeoff(a) -> None:
             synced = A.beat_sync(per[rec], beats.beats, end)
             variants += [(rec, "beat", synced, False), (rec, "beat+7", synced, True)]
         voted = A.vote(per, beats.beats, end)
-        variants += [("vote", "beat", voted, False), ("vote", "beat+7", voted, True),
-                     ("auto", f"7s={share:.2f}", voted, share >= A.JAZZ_SEVENTH_SHARE)]
+        variants += [
+            ("vote", "beat", voted, False),
+            ("vote", "beat+7", voted, True),
+            ("auto", f"7s={share:.2f}", voted, share >= A.JAZZ_SEVENTH_SHARE),
+        ]
         for rec, mode, sg, sev in variants:
             tl, _ = A.build_timeline(truth["id"].split(":")[-1], truth["durationMs"], beats, sg, rec, sevenths=sev)
-            row = {"track": name, "recogniser": rec, "mode": mode, **E.chord_scores(truth, tl),
-                   "beatF": E.beat_f(truth, tl["beats"]), "beatAMLt": E.beat_amlt(truth, tl["beats"]),
-                   "downbeatF": E.downbeat_f(truth, tl), "beatSecs": round(bt, 1), "key": E.key_scores(truth, tl)}
+            row = {
+                "track": name,
+                "recogniser": rec,
+                "mode": mode,
+                **E.chord_scores(truth, tl),
+                "beatF": E.beat_f(truth, tl["beats"]),
+                "beatAMLt": E.beat_amlt(truth, tl["beats"]),
+                "downbeatF": E.downbeat_f(truth, tl),
+                "beatSecs": round(bt, 1),
+                "key": E.key_scores(truth, tl),
+            }
             rows.append(row)
-            print(f"{name:20} {rec:9} {mode:8} sevenths {row['sevenths']:.3f}  majmin {row['majmin']:.3f}  "
-                  f"root {row['root']:.3f}  jazz {row['jazz']:.3f}  beatF {row['beatF']:.3f}  AMLt {row['beatAMLt']:.3f}  "
-                  f"dbF {row['downbeatF']:.3f}  key {row['key'].get('agree')} {row['key'].get('estMain')}")
+            print(
+                f"{name:20} {rec:9} {mode:8} sevenths {row['sevenths']:.3f}  majmin {row['majmin']:.3f}  "
+                f"root {row['root']:.3f}  jazz {row['jazz']:.3f}  beatF {row['beatF']:.3f}  "
+                f"AMLt {row['beatAMLt']:.3f}  "
+                f"dbF {row['downbeatF']:.3f}  key {row['key'].get('agree')} {row['key'].get('estMain')}"
+            )
     out = COMPANION / "reports" / "sp4-bakeoff.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf8")

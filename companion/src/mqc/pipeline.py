@@ -30,8 +30,9 @@ def analyse_audio(
     t0 = time.time()
     beats = beats or A.track_beats(audio, sr)
     ch = A.recognise(audio, sr, beats, recogniser)
-    tl, unparsed = A.build_timeline(track_id, duration_ms, beats, ch.segs, f"mqc/{ch.name}+beat_this",
-                                    sevenths=ch.sevenths)
+    tl, unparsed = A.build_timeline(
+        track_id, duration_ms, beats, ch.segs, f"mqc/{ch.name}+beat_this", sevenths=ch.sevenths
+    )
     if unparsed:
         log(f"  unparsed labels (stored as N.C.): {sorted(set(unparsed))}")
     errs = A.validate_timeline(tl)

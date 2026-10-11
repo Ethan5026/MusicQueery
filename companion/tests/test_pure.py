@@ -95,7 +95,7 @@ def test_validate_timeline():
 
 def test_regularise_merges_glitch_bars_and_fixes_beat_level():
     # 4/4 at 1 s per bar; beat_this counted half notes in bars 3-4 and put a glitch downbeat at 4.25 s
-    beats = [0, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 4.25, 4.5, 4.75, 5, 5.25, 5.5, 5.75, 6]
+    beats = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 4.25, 4.5, 4.75, 5, 5.25, 5.5, 5.75, 6]
     b = A.Beats(np.array(beats), np.array([0, 1, 2, 3, 4, 4.25, 5, 6]))
     r = A.regularise(b)
     assert r.downbeats.tolist() == [0, 1, 2, 3, 4, 5, 6]

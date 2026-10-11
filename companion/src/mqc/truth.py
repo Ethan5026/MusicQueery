@@ -152,7 +152,11 @@ def chart_meter(rec: dict) -> int:
     if not any("chart" in seg or "chartBars" in seg for seg in rec["form"]):
         return 4
     ch = rec["chart"]
-    path = ch["playlist"] if Path(ch["playlist"]).exists() else str(REPO / "packages" / "theory" / "corpus" / f"{ch['playlist']}.txt")
+    path = (
+        ch["playlist"]
+        if Path(ch["playlist"]).exists()
+        else str(REPO / "packages" / "theory" / "corpus" / f"{ch['playlist']}.txt")
+    )
     return bridge.call({"op": "chart", "playlist": path, "title": ch["title"]})["chart"]["meter"]["num"]
 
 

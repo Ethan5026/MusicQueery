@@ -196,12 +196,69 @@ class Spotify:
             path, params = (page["next"].replace(API, "") if page.get("next") else ""), {}
         return out
 
-    def play(self, track_id: str, device_id: str, position_ms: int = 0) -> None:
-        """Starts the track inside its album. The Windows desktop client (2026-10) accepts `{"uris": [...]}` with
-        a 204 but never loads the track; an album context with an offset works (D-33)."""
-        album = self.track(track_id)["album"]["uri"]
-        body = {"context_uri": album, "offset": {"uri": f"spotify:track:{track_id}"}, "position_ms": position_ms}
+    PLAY_METHODS = ("album-uri", "album-position", "queue")
+
+    def play(self, track_id: str, device_id: str, position_ms: int = 0, method: str = "album-uri") -> None:
+        """Starts a track on a device. The Windows desktop client (2026-10) accepts `{"uris": [...]}` with a 204 but
+        never loads the track (D-33), so the track is started inside its album: by track URI, or by position when
+        Spotify picks the wrong album track (seen on a live album), or else queued and skipped to."""
+        if method == "queue":
+            r = self.call(
+                "POST", "/me/player/queue", params={"uri": f"spotify:track:{track_id}", "device_id": device_id}
+            )
+            if r.status_code not in (200, 202, 204):
+                raise SpotifyError(f"queue: {r.status_code} {r.text}")
+            r = self.call("POST", "/me/player/next", params={"device_id": device_id})
+            if r.status_code not in (200, 202, 204):
+                raise SpotifyError(f"next: {r.status_code} {r.text}")
+            if position_ms:
+                self.put("/me/player/seek", None, position_ms=position_ms, device_id=device_id)
+            return
+        t = self.track(track_id)
+        offset = (
+            {"uri": f"spotify:track:{track_id}"}
+            if method == "album-uri"
+            else {"position": self._album_position(t["album"]["id"], track_id, t)}
+        )
+        body = {"context_uri": t["album"]["uri"], "offset": offset, "position_ms": position_ms}
         self.put("/me/player/play", body, device_id=device_id)
+
+    def _album_position(self, album_id: str, track_id: str, t: dict) -> int:
+        """0-based index of the track in its album across discs (falls back to track_number - 1)."""
+        try:
+            items, path, params = [], f"/albums/{album_id}/tracks", {"limit": 50}
+            while path:
+                page = self.get(path, **params)
+                items += page["items"]
+                path, params = (page["next"].replace(API, "") if page.get("next") else ""), {}
+            return next(i for i, x in enumerate(items) if x["id"] == track_id)
+        except (SpotifyError, StopIteration):
+            return int(t["track_number"]) - 1
+
+    def playlist_ids_by_playing(self, playlist_id: str, device_id: str, n: int, log=print) -> list[str]:
+        """Track ids at positions 0..n-1 of a playlist, found by starting it at each position and reading the
+        player. Playlist reads can be quota-blocked for a day in development mode (QUOTA_EXCEEDED) while the
+        player endpoints still work."""
+        ids: list[str] = []
+        for i in range(n):
+            body = {"context_uri": f"spotify:playlist:{playlist_id}", "offset": {"position": i}, "position_ms": 0}
+            r = self.call("PUT", "/me/player/play", params={"device_id": device_id}, json=body)
+            if r.status_code not in (200, 202, 204):
+                log(f"  position {i}: {r.status_code} {r.text[:120]}")
+                break
+            tid = None
+            for _ in range(20):
+                time.sleep(0.4)
+                st = self.player()
+                if st and st.track_id and st.track_id not in ids and st.is_playing:
+                    tid = st.track_id
+                    break
+            if not tid:
+                log(f"  position {i}: no track started, stopping")
+                break
+            ids.append(tid)
+        self.pause(device_id)
+        return ids
 
     def pause(self, device_id: str | None = None) -> None:
         r = self.call("PUT", "/me/player/pause", params={"device_id": device_id} if device_id else {})

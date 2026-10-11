@@ -14,6 +14,11 @@ dependencies = [
   "torch>=2.5",
   "beat-this>=1.0",
   "mir-eval>=0.8",
+  # chord recognisers voted together (D-34); vamp is built by scripts/build_chordino.py, BTC is fetched by hand (handoff)
+  "madmom",
+  "vamp>=1.1",
+  "librosa>=0.10",
+  "pyyaml>=6",
 ]
 
 [project.scripts]
@@ -21,8 +26,6 @@ mqc = "mqc.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.8"]
-# SP4 candidates. madmom from git (0.16.1 on PyPI does not build on 3.12); vamp hosts Chordino (NNLS chroma).
-bakeoff = ["madmom", "vamp>=1.1", "librosa>=0.10", "pyyaml>=6"]
 
 [build-system]
 requires = ["hatchling"]
@@ -39,6 +42,7 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
+# madmom 0.16.1 on PyPI does not build on 3.12
 madmom = { git = "https://github.com/CPJKU/madmom" }
 # Built by scripts/build_chordino.py (the PyPI sdist does not compile with MSVC).
 vamp = { path = ".wheels/vamp-1.1.0-cp312-cp312-win_amd64.whl" }

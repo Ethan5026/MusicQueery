@@ -5,8 +5,8 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**M3 · Companion + timeline store — not started.**
-Read `handoffs/DECISIONS.md`, then `handoffs/M2-theory.md`. It names the parts of `02-dev-plan.md` that M3 needs.
+**M4 · Shell + Stand — not started.**
+Read `handoffs/DECISIONS.md`, then `handoffs/M3-analysis.md`. Its Next prompt names what M4 needs.
 
 ## Session protocol (keeps context small)
 
@@ -27,6 +27,7 @@ Read `handoffs/DECISIONS.md`, then `handoffs/M2-theory.md`. It names the parts o
 
 - `apps/web` — the PWA (Vite + React). `apps/worker` — Cloudflare Worker: serves the PWA and `/api/*` (D-23)
 - `packages/theory`, `packages/model` — pure TS packages (M2). iReal corpus: `pnpm --filter @mq/theory corpus`
+- `companion/` — Windows companion, Python 3.12 + uv (M3): `pnpm companion <cmd>` (`analyse`, `bakeoff`, `login`…)
 - Commands: `pnpm dev`, `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm ship` (deploy), `pnpm tail` (live device logs)
 - `design/sketchbook.html` — approved design source (published as an artifact; URL in 01-design.md)
 - `handoffs/` — stage handoffs, decision log, template (see `handoffs/README.md`)

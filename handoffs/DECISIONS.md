@@ -81,6 +81,37 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
 - **D-31** (M2) `theory.moment(timeline, positionMs, { instrument, lens })` returns everything a screen shows at one instant.
   The per-timeline analysis (key regions by Viterbi over 24 keys, harmonic functions, ii–Vs) is computed once per timeline and cached.
 
+- **D-32** (M3, refines D-17) Timeline store: `PUT/DELETE /api/timelines/:id` and the list `GET /api/timelines` need
+  `Authorization: Bearer <API_SECRET>` (a Worker secret; the companion keeps it in `%APPDATA%\MusicQueery\companion\config.json`).
+  `GET /api/timelines/:id` is public so the PWA needs no secret (timelines are derived data, not audio). PUT bodies are
+  validated with `@mq/model`'s zod `Timeline`, and the id in the body must match the path (`spotify:track:<22>` or `chart:<slug>`).
+  KV key `tl:<id>`, metadata = source, generator, counts. The companion may also POST `/api/log` with the secret.
+- **D-33** (M3, SP3) Capture is `companion/capture/mqcapture.exe` (C++, MSVC Build Tools; Rust not installed so not tried):
+  WASAPI process loopback of the Spotify.exe process tree, 44.1 kHz 16-bit, plus per-packet QPC times. It captures with the PC
+  muted. The capture is lined up with track time by the median of `capture time − progress_ms` over the /me/player samples:
+  repeat runs agree within 1–45 ms (constant bias left to M5's calibration). The Windows desktop client accepts
+  `play {uris}` with a 204 but never loads the track, so the companion starts the track inside its album (offset by URI,
+  then by position when Spotify picks the wrong album track, then queue + next) and waits for the player to confirm each try.
+  A failed capture deletes its audio at once.
+- **D-34** (M3, SP4) Analysis pipeline: beat_this, then `regularise` (merge glitch bars, one beat level); chords from a per-beat
+  root vote of BTC large-vocab (1.2), Chordino (1.0), madmom maj/min (0.8), the label taken from the heaviest recogniser on the
+  winning root; beat-synced; keys by `detectKeys` and roots spelled in key (`@mq/theory` via `scripts/bridge.ts`). Triads become
+  lead-sheet 7ths (`leadSheetSeventh`) only when BTC labels ≥ 18% of the track with 7th/6th chords (jazz 26–42%, pop 0.4–8%).
+  MIREX sevenths per beat: Let It Be 0.85, Imagine 0.70, Mas Que Nada 0.64, Fly Me to the Moon 0.54; beat F 0.977–0.998.
+- **D-35** (M3) Spotify development mode can quota-block playlist reads (`/me/playlists`, `/playlists/*`) for ~24 h
+  (`429 QUOTA_EXCEEDED`, Retry-After ≈ 86 000 s) while player and track endpoints keep working. Spotify calls cap Retry-After at
+  30 s and fail instead of stalling; a playlist's tracks can be found by playing it at each position.
+- **D-36** (M3, user) Popular songs come first: recognising chords and progressions in pop songs that are in no standards list
+  is the main job; iReal charts and chart alignment are a bonus for standards. Evaluation weights pop at least equally and
+  jazz-only priors must be gated. New test songs come from the user's Spotify playlist "Swinging and Shredding", only when needed.
+- **D-37** (M3) Ground truth without taps: chart chords (iReal, transposed if needed) laid on madmom's 4/4 downbeat grid (independent
+  of beat_this; agreement with regularised beat_this F = 0.976–0.998); the form is read from the recognisers and accepted only when
+  root accuracy peaks at zero beat shift. `mqc tap` (ENTER on bar lines, SPACE on beats) exists for hand-tapped truth.
+
 ## Pending
 
-(none)
+- **P-01** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
+  on standards and none on Let It Be (verse and chorus share chords), so analysed timelines carry no section labels. Decide by
+  M5 (lead-sheet rehearsal letters) or M8 (Song map): chord-repetition analysis, a structure model, or chart alignment.
+- **P-02** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
+  Mas Que Nada's F minor (B♭m7–E♭7 bars). Main key right on 3 of 4 truth tracks. Revisit the emission weights with the truth set.

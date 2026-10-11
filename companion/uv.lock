@@ -402,23 +402,21 @@ dependencies = [
     { name = "beat-this" },
     { name = "httpx" },
     { name = "jsonschema" },
+    { name = "librosa" },
+    { name = "madmom" },
     { name = "mir-eval" },
     { name = "numpy" },
     { name = "psutil" },
+    { name = "pyyaml" },
     { name = "scipy" },
     { name = "soundfile" },
     { name = "soxr" },
     { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "vamp" },
 ]
 
 [package.dev-dependencies]
-bakeoff = [
-    { name = "librosa" },
-    { name = "madmom" },
-    { name = "pyyaml" },
-    { name = "vamp" },
-]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -429,22 +427,20 @@ requires-dist = [
     { name = "beat-this", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "jsonschema", specifier = ">=4.23" },
+    { name = "librosa", specifier = ">=0.10" },
+    { name = "madmom", git = "https://github.com/CPJKU/madmom" },
     { name = "mir-eval", specifier = ">=0.8" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "psutil", specifier = ">=6.0" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "scipy", specifier = ">=1.14" },
     { name = "soundfile", specifier = ">=0.13" },
     { name = "soxr", specifier = ">=0.5" },
     { name = "torch", specifier = ">=2.5", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "vamp", path = ".wheels/vamp-1.1.0-cp312-cp312-win_amd64.whl" },
 ]
 
 [package.metadata.requires-dev]
-bakeoff = [
-    { name = "librosa", specifier = ">=0.10" },
-    { name = "madmom", git = "https://github.com/CPJKU/madmom" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "vamp", path = ".wheels/vamp-1.1.0-cp312-cp312-win_amd64.whl" },
-]
 dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.8" },
