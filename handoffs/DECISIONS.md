@@ -124,6 +124,24 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   It's Too Late .874→.912; Something's capo chart (74%) and Fly Me's (71%) rejected. Placing the chart's chords themselves
   scored below recognition (Let It Be .749, Just the Way You Are .638), so that is not used.
 
+- **D-41** (M4) App shell: five tabs (Stand, Tracks, Map, Coach, Settings; tab in the URL hash). Themes from the sketch's tokens:
+  Stage (dark) is the default, Paper (light), Auto; Paper paints the status-bar strip ink-dark because the standalone status text is
+  always white. Fonts are self-hosted (`@fontsource` latin subsets + Noto Music's music subset) and precached with the shell.
+  IndexedDB `musicqueery` v1 holds `settings` (prefs, last session), `timelines` (cache by ID) and `tracks` (titles); settings
+  load before the first render, and the last timeline reopens paused where it was left.
+- **D-42** (M4, user) The Play card has three modes, switched on the card and in Settings, default **Integrated**.
+  Simple = the scale of the current key centre (major / natural minor), its pentatonic highlighted. Integrated = Simple plus
+  callouts: a chord with tones outside the key swaps them into the scale on the same letter (rust, "C major, but F♯ over D7"),
+  and a key change is announced 8 beats ahead and shown on the staff for the last 4. Advanced = the per-chord scale under the
+  lens with the chord stacked and guide tones (D-06, D-11). All in written pitch for the sax views.
+- **D-43** (M4) The phone cannot list the store (D-32 keeps the list behind the secret), so Tracks → Recorded shows the demo chart,
+  Let It Be, every timeline cached on the phone, and a box for a Spotify link/URI/ID. Titles come from Spotify `/tracks/{id}`
+  (when logged in) and are cached.
+- **D-44** (M4) Render budget: Stand re-renders only when the beat or the chord changes; the progress bar moves per frame through
+  refs. `perf.ts` counts frame gaps > 50 ms (Safari has no Long Tasks API) and logs `perf.window` every 30 s. iPhone: 0 in 2 min.
+- **D-45** (M4) `pnpm e2e` runs Playwright 1.63 WebKit at 402×778 against `vite preview`. The offline test starts its own preview
+  server and stops it, because WebKit's `setOffline` fails navigations before the service worker sees them.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
