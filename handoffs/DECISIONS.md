@@ -142,6 +142,15 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
 - **D-45** (M4) `pnpm e2e` runs Playwright 1.63 WebKit at 402×778 against `vite preview`. The offline test starts its own preview
   server and stops it, because WebKit's `setOffline` fails navigations before the service worker sees them.
 
+- **D-46** (M5, user asked where phone-triggered analysis fits) Analysis queue: the phone queues a Spotify track with
+  `POST /api/queue/:id`, authorised by its Spotify token (the Worker checks `/v1/me` against `ALLOWED_SPOTIFY_USERS`), since the
+  phone has no store secret (D-32). `GET /api/queue/:id` is public; listing, updating and deleting need the secret; uploading the
+  timeline clears the request. `mqc watch` analyses only after Spotify has been idle on every device for `--idle-minutes`
+  (default 10), because capture plays the track on the PC and Spotify has one active device per account, so it would take
+  playback from the Fire TV. KV is eventually consistent: a new request reached the list after ~15 s.
+- **D-47** (M5, user) New milestone **M5b Playlist inbox**: a Spotify playlist where adding a song queues it for analysis and
+  analysed songs stay as the practice set; scope and exit criteria in `02-dev-plan.md`. Independent of M6–M8.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries

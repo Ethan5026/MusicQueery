@@ -23,6 +23,7 @@ Older handoffs are history. Don't load them unless the current handoff points to
 | M3 | Companion + timeline store | `M3-analysis.md` | Timeline JSON produced for real tracks, served by the Worker |
 | M4 | App shell + Stand | `M4-stand.md` | Portrait Stand screen running on a recorded timeline |
 | M5 | Live wiring + Lead sheet | `M5-live.md` | Live sync + timeline, landscape lead sheet |
+| M5b | Playlist inbox | `M5b-inbox.md` | Add a song to a Spotify playlist and the PC analyses it |
 | M6 | Backing tracks | `M6-backing.md` | In-app band plays a chart, iReal import, drills, Spotify play-along |
 | M7 | Listening live + Predicted | `M7-listen.md` | Mic chord detection, predicted chords, chart alignment, chord fixes |
 | M8 | Map, Coach, polish | `M8-polish.md` | All five tabs used in a week of real practice |
