@@ -3,7 +3,7 @@
 // position (D-16): Spotify when it plays something, else the app's own clock. React re-renders once per beat or
 // chord change; the progress bar and playhead move every frame through refs (D-44).
 import type { Timeline } from '@mq/model'
-import { type Moment, type MomentKey, INSTRUMENT_IDS, analyseTimeline } from '@mq/theory'
+import { type Moment, type MomentKey, analyseTimeline } from '@mq/theory'
 import { useEffect, useMemo, useRef } from 'react'
 import { activeTransport, clock, retryFollow, useApp, useSession } from '../../services'
 import { login } from '../../spotify/auth'
@@ -12,6 +12,7 @@ import type { TrackMeta } from '../../timeline/library'
 import { AnalyseButton } from '../AnalyseButton'
 import { Acc, ChordSym, Seg, SourceBadge, SyncBadge } from '../atoms'
 import { Calibrate } from './Calibrate'
+import { InstrumentSeg } from './InstrumentSeg'
 import { Keyboard } from './Keyboard'
 import { LeadSheet } from './LeadSheet'
 import { frameBus, useLandscape, useMoment, useStandUi, useSync } from './live'
@@ -19,7 +20,6 @@ import { type PlayView, playView } from './play'
 import { Staff } from './Staff'
 import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from './view'
 
-const INSTRUMENT_SHORT = { concert: 'Concert', alto: 'E♭ alto', tenor: 'B♭ tenor' } as const
 
 export function Stand() {
   const { timeline, meta, status, driver } = useSession()
@@ -252,7 +252,6 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
       : m.scales.colour
     : null
   const view = playView(m, settings.mode)
-  const nextInst = INSTRUMENT_IDS[(INSTRUMENT_IDS.indexOf(inst) + 1) % INSTRUMENT_IDS.length]!
 
   return (
     <div className="stand">
@@ -403,14 +402,7 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
                   or <Acc text={`${alt.root} ${alt.name}`} />
                 </span>
               )}
-              <button
-                type="button"
-                className="lbl inst-btn"
-                title={`Switch to ${INSTRUMENT_SHORT[nextInst]}`}
-                onClick={() => setSettings({ instrument: nextInst })}
-              >
-                <Acc text={m.instrumentLabel} />
-              </button>
+              <InstrumentSeg name="pinst" />
             </div>
             {settings.notes === 'staff' ? (
               <div className="staffbox">

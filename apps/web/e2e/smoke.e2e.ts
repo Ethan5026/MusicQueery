@@ -76,19 +76,36 @@ test('play runs the manual clock; pause holds it', async ({ page }) => {
   await expect(page.locator('.prog .mono').first()).toHaveText(t!)
 })
 
-test('instrument views transpose chords, keys and scales', async ({ page }) => {
+test('instrument views transpose chords, keys and scales; the switch is on both Stand screens', async ({ page }) => {
   await page.goto('/')
   await expect(hero(page)).toHaveText('B♭m7')
-  await page.locator('.inst-btn').click()
+  await page.locator('label[for="pinst-alto"]').click()
   await expect(hero(page)).toHaveText('Gm7')
-  await expect(page.locator('.inst-btn')).toHaveText('Written · E♭ alto')
   await expect(page.locator('.chip').first()).toContainText('F major')
-  await page.locator('.inst-btn').click()
+  await page.locator('label[for="pinst-tenor"]').click()
   await expect(hero(page)).toHaveText('Cm7')
+  // landscape has the same switch
+  await page.setViewportSize({ width: 874, height: 402 })
+  await expect(page.locator('#linst-tenor')).toBeChecked()
+  await page.locator('label[for="linst-alto"]').click()
+  await expect(page.getByTestId('rail-chord')).toHaveText('Gm7')
+  await page.setViewportSize({ width: 402, height: 778 })
+  await expect(page.locator('#pinst-alto')).toBeChecked()
   await tab(page, 'Settings').click()
   await page.locator('label', { hasText: 'Concert · piano' }).click()
   await tab(page, 'Stand').click()
   await expect(hero(page)).toHaveText('B♭m7')
+})
+
+test('portrait Stand still fits the screen without scrolling in every Play mode', async ({ page }) => {
+  await page.goto('/')
+  await expect(hero(page)).toHaveText('B♭m7')
+  await seek(page, Math.round((((4 + 36 + 23) * 4 + 1.05) * 60000) / 168)) // C7♯5: the longest Advanced heading
+  for (const mode of ['simple', 'integrated', 'advanced']) {
+    await page.locator(`label[for="pmode-${mode}"]`).click()
+    const [scroll, client] = await page.locator('main.view').evaluate((el) => [el.scrollHeight, el.clientHeight])
+    expect(scroll, `${mode}: content ${scroll} px in ${client} px`).toBeLessThanOrEqual(client)
+  }
 })
 
 test('opens an analysed pop timeline from the store', async ({ page }) => {

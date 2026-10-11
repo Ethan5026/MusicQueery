@@ -4,12 +4,13 @@
 // colour, and Next, the next point where the notes change, in muted ink with only the changing notes in rust and a
 // countdown that turns rust in the last four beats. Same moment, Play mode and Staff/Keys setting as portrait.
 import type { Timeline } from '@mq/model'
-import { type Moment, INSTRUMENT_IDS, analyseTimeline } from '@mq/theory'
+import { type Moment, analyseTimeline } from '@mq/theory'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { activeTransport } from '../../services'
 import { type Settings, useSettings } from '../../store/settings'
 import type { TrackMeta } from '../../timeline/library'
 import { Acc, ChordSym, Seg } from '../atoms'
+import { InstrumentSeg } from './InstrumentSeg'
 import { Keyboard } from './Keyboard'
 import { frameBus } from './live'
 import { type NextResult, beatsUntil, nextChange } from './next'
@@ -21,7 +22,6 @@ import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from
 
 /** Lines in view at once. */
 const VISIBLE = 4
-const INSTRUMENT_SHORT = { concert: 'Concert', alto: 'E♭ alto', tenor: 'B♭ tenor' } as const
 
 export function LeadSheet({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m: Moment; settings: Settings }) {
   const inst = settings.instrument
@@ -157,8 +157,6 @@ function PlayPanel({ tl, m, settings }: { tl: Timeline; m: Moment; settings: Set
   const showNext = settings.nextScale
   const res = showNext ? cachedNext(tl, m, settings) : null
   const then = m.next[0]
-  const inst = settings.instrument
-  const nextInst = INSTRUMENT_IDS[(INSTRUMENT_IDS.indexOf(inst) + 1) % INSTRUMENT_IDS.length]!
   const big = !showNext
   const outside = now?.callout?.kind === 'outside' ? now.callout.changed : []
 
@@ -244,14 +242,7 @@ function PlayPanel({ tl, m, settings }: { tl: Timeline; m: Moment; settings: Set
                   ))}
                 </span>
               )}
-              <button
-                type="button"
-                className="lbl inst-btn"
-                title={`Switch to ${INSTRUMENT_SHORT[nextInst]}`}
-                onClick={() => set({ instrument: nextInst })}
-              >
-                <Acc text={m.instrumentLabel} />
-              </button>
+              <InstrumentSeg name="linst" />
             </div>
             {now && <Notes view={now} kind={settings.notes} big={big} />}
           </div>
