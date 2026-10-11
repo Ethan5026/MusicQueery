@@ -6,7 +6,11 @@
 import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { Chart } from '@mq/model'
+import { importPlaylist } from '@mq/theory'
+import { alignChart } from '../src/align'
 import { LiveDecoder } from '../src/live'
+import { liveTimeline } from '../src/timeline'
 import { decodeOffline, type OfflineOptions } from '../src/offline'
 import { simulateRoom } from '../src/room'
 import { scoreBeats, type Scores, type Span } from '../src/score'
@@ -15,6 +19,27 @@ const REPO = join(import.meta.dirname, '..', '..', '..')
 const TRUTH = join(REPO, 'companion', 'truth')
 const AUDIO = join(process.env.LOCALAPPDATA ?? '', 'MusicQueery', 'work', 'truth')
 const SR = 44100
+/** iReal Pop 400 charts for the human-annotated truth songs (M7: does a linked chart raise accuracy?) */
+const CHART_TITLES: Record<string, string> = {
+  'beatles--let-it-be': 'Let It Be',
+  'beatles--something': 'Something',
+  'billy-joel--just-the-way-you-are': 'Just The Way You Are (Page 1)',
+  'carole-king--its-too-late': "It's Too Late",
+  'queen--dont-stop-me-now': "Don't Stop Me Now",
+}
+let pop: Chart[] | null = null
+function chartFor(name: string): Chart | null {
+  // --wrong-chart: every song gets the next song's chart, to check that a wrong link is refused
+  const names = Object.keys(CHART_TITLES)
+  const title = flag('--wrong-chart') ? CHART_TITLES[names[(names.indexOf(name) + 1) % names.length]!] : CHART_TITLES[name]
+  if (!title) return null
+  pop ??= importPlaylist(readFileSync(join(REPO, 'packages', 'theory', 'corpus', 'pop400.txt'), 'utf8'))
+    .results.map((r) => r.chart)
+    .filter((c): c is Chart => !!c)
+  return pop.find((c) => c.title === title) ?? null
+}
+const chartRows: { before: number; after: number; beforeS: number; afterS: number }[] = []
+
 const predPending: { t: number; symbol: string }[] = []
 const liveRows: { shown: number; shownS: number; final: number; finalS: number; lat: number; within: number }[] = []
 
@@ -121,6 +146,23 @@ function live(name: string, audio: Float32Array, tl: TruthTl): void {
     else predN--
   }
   const lat = latency(tl, shown)
+  const chart = flag('--chart') ? chartFor(name) : null
+  if (chart) {
+    const heard = liveTimeline({
+      id: 'spotify:track:0000000000000000000000',
+      durationMs: audio.length / SR * 1000,
+      chords: toSpans(fin.chords).map((c) => ({ ...c, symbol: c.symbol })),
+      beats: fin.beats.map((b) => b * 1000),
+      createdAt: new Date().toISOString(),
+    })
+    const r = alignChart(chart, heard)
+    const after = r.timeline ? scoreBeats(tl.chords, tl.beats, r.timeline.chords) : sFinal
+    console.log(
+      `  chart "${chart.title}": ${r.timeline ? 'linked' : 'REJECTED'} (moved ${r.semis}, ratio ${r.ratio}, matched ${(r.matched * 100).toFixed(0)}%, roots agree ${(r.agreement * 100).toFixed(0)}%, jumps/bar ${r.jumpRate.toFixed(2)})` +
+        `  majmin ${pct(sFinal.majmin)} → ${pct(after.majmin)}  sevenths ${pct(sFinal.sevenths)} → ${pct(after.sevenths)}`,
+    )
+    chartRows.push({ before: sFinal.majmin, after: after.majmin, beforeS: sFinal.sevenths, afterS: after.sevenths })
+  }
   console.log(
     `${name.padEnd(36)} shown ${pct(sShown.majmin)} / ${pct(sShown.sevenths)}  settled ${pct(sSettled.majmin)}  final ${pct(sFinal.majmin)} / ${pct(sFinal.sevenths)}  ` +
       `latency median ${lat.median.toFixed(0)} ms (${(lat.within * 100).toFixed(0)}% ≤ 1 beat)  predicted ${predN ? pct(predHits / predN) : '  —  '} (${predN})  ${(ms / 1000).toFixed(1)} s`,
@@ -135,6 +177,11 @@ process.on('beforeExit', () => {
     `MEAN shown majmin ${pct(m('shown'))} sevenths ${pct(m('shownS'))} · final majmin ${pct(m('final'))} sevenths ${pct(m('finalS'))} · latency ${m('lat').toFixed(0)} ms, ${(m('within') * 100).toFixed(0)}% within a beat`,
   )
   liveRows.length = 0
+  if (chartRows.length) {
+    const c = (k: keyof (typeof chartRows)[0]) => chartRows.reduce((a, r) => a + r[k], 0) / chartRows.length
+    console.log(`MEAN linked chart (${chartRows.length} songs): majmin ${pct(c('before'))} → ${pct(c('after'))}, sevenths ${pct(c('beforeS'))} → ${pct(c('afterS'))}`)
+    chartRows.length = 0
+  }
 })
 
 /** For each truth chord change, how long until the shown chord matched the new chord (majmin), if it did. */

@@ -11,6 +11,7 @@ import { Calibrate } from '../stand/Calibrate'
 import { useStandUi, useSync } from '../stand/live'
 import { useSubscription } from '../hooks'
 import { AudioTestCard } from './AudioTest'
+import { MicTestCard } from './MicTest'
 import { AuthCard, DebugCard, NowCard, ProbeCard, WakeCard } from './Diagnostics'
 
 export function SettingsTab() {
@@ -133,6 +134,7 @@ export function SettingsTab() {
             <NowCard />
             <ProbeCard />
             <AudioTestCard />
+            <MicTestCard />
             <WakeCard />
             <DebugCard />
           </>

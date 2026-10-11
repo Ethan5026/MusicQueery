@@ -34,7 +34,7 @@ export function liveTimeline(o: LiveTimelineInput): Timeline {
   const fin = finishAnalysis(chords, beats)
   const phase = o.phase ?? barPhase(fin.chords, beats)
   const bars: Timeline['bars'] = []
-  for (let i = phase, n = 1; i < beats.length; i += 4, n++) bars.push({ startMs: round1(beats[i]!), number: n })
+  for (let i = phase, n = 1; i + 1 < beats.length; i += 4, n++) bars.push({ startMs: round1(beats[i]!), number: n })
   const ibi = median(beats.slice(1).map((b, i) => b - beats[i]!))
   return {
     schema: 'mq.timeline/1',

@@ -1,0 +1,5 @@
+beatles--let-it-be                   ref 14 · truth chords 17 F 0.76 · live 25 F 0.49 · PC 16 F 0.57 AAABAACCACAABBBD
+beatles--something                   ref  9 · truth chords  6 F 0.77 · live  2 F 0.00 · PC  5 F 0.17 AABCA
+carole-king--its-too-late            ref 12 · truth chords 16 F 0.46 · live 17 F 0.44 · PC 15 F 0.48 AABAABCAAADABCE
+queen--dont-stop-me-now              ref 10 · truth chords 18 F 0.62 · live  2 F 0.00 · PC 20 F 0.50 ABCADBEFAGBHAABIJKAL
+MEAN boundary F@3s: truth chords 0.65, live 0.23, PC analysis 0.43

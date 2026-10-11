@@ -2,6 +2,7 @@
 // nothing-playing states, turns into the lead sheet in landscape (tap a bar → seek), and calibrates a speaker.
 import { readFileSync } from 'node:fs'
 import { type Page, type Request, expect, test } from '@playwright/test'
+import { FAKE_MIC } from './fake-mic'
 
 const LET_IT_BE_ID = '7iN1s7xHE4ifF5povM6A48'
 const UNKNOWN_ID = '0000000000000000000000'
@@ -301,4 +302,66 @@ test('the A–B loop on a Spotify track seeks back to A just before B', async ({
   // aimed at A (less the start bias, which is 0 here), sent within a second before B
   expect(Math.abs(sp.seeks[0]! - barStart)).toBeLessThan(5)
   expect(barEnd - barStart).toBeGreaterThan(1000)
+})
+
+// ---------------------------------------------------------------- M7: listening live, Predicted, chord fixes
+
+test('listen with the mic on a track with no timeline: live chords, confidence, Predicted, saved on stop', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.addInitScript(FAKE_MIC)
+  const uploads: { token: string | null; body: { source: string; chords: unknown[] } }[] = []
+  await page.context().route('**/api/live/**', (r) => {
+    const req = r.request()
+    if (req.method() === 'GET') return r.fulfill({ status: 404, body: '' })
+    uploads.push({ token: req.headers()['x-spotify-token'] ?? null, body: req.postDataJSON() })
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+  })
+  await page.context().route('**/api/edits/**', (r) => r.fulfill({ status: 404, body: '' }))
+  sp.set({ trackId: UNKNOWN_ID, base: 0, playing: true })
+  await page.goto('/')
+  await expect(page.getByTestId('not-analysed')).toContainText('Listen with the phone’s mic')
+  await page.getByTestId('listen').click()
+  await expect(page.getByTestId('listening').or(hero(page))).toBeVisible()
+  // the loop is C – Am – F – G; the first chords show within a few seconds
+  await expect(hero(page)).toHaveText(/^(C|Am|F|G)$/, { timeout: 15_000 })
+  await expect(page.locator('.src.live')).toHaveText('Listening live')
+  await expect(page.getByTestId('confidence')).toBeVisible()
+  await expect(page.getByTestId('mic-on')).toBeVisible()
+  // once the loop has come round, what follows is predicted (grey) from the first time through
+  await expect(page.locator('.next.pred li:not(.none)').first()).toBeVisible({ timeout: 40_000 })
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: 'test-results/shot-listening.png' })
+  await page.getByTestId('mic-on').click()
+  await expect.poll(() => uploads.length, { timeout: 10_000 }).toBeGreaterThan(0)
+  expect(uploads[0]!.token).toBe('x')
+  expect(uploads[0]!.body.source).toBe('live')
+  expect(uploads[0]!.body.chords.length).toBeGreaterThan(3)
+  // the track now opens with what was heard
+  await expect(page.locator('.src.live')).toHaveText('Heard live')
+})
+
+test('fix a chord: it shows at once, is sent to the store, and survives a reload', async ({ page }) => {
+  const puts: unknown[] = []
+  await page.context().route('**/api/edits/**', (r) => {
+    const req = r.request()
+    if (req.method() === 'GET') return r.fulfill({ status: 404, body: '' })
+    puts.push(req.postDataJSON())
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+  })
+  await page.goto('/')
+  await expect(hero(page)).toHaveText(chordAt(30_000))
+  const was = chordAt(30_000)
+  await hero(page).click()
+  await page.getByRole('group', { name: 'Root' }).getByRole('button', { name: 'E♭' }).click()
+  await page.getByRole('group', { name: 'Quality' }).getByRole('button', { name: 'maj7' }).click()
+  await expect(page.getByTestId('fix-preview')).toHaveText('E♭maj7')
+  await page.getByTestId('fix-save').click()
+  await expect(hero(page)).toHaveText('E♭maj7')
+  await expect.poll(() => puts.length).toBe(1)
+  expect(puts[0]).toMatchObject({ edits: [{ symbol: 'E♭maj7', prev: was }] })
+  await page.reload()
+  await expect(hero(page)).toHaveText('E♭maj7')
+  // undo
+  await hero(page).click()
+  await page.getByRole('button', { name: /Undo all my fixes/ }).click()
+  await expect(hero(page)).toHaveText(was)
 })

@@ -1,0 +1,14 @@
+  chart "Let It Be": linked (moved 0, ratio 2, matched 100%, roots agree 85%, jumps/bar 0.05)  majmin  86.7% →  85.6%  sevenths  70.1% →  77.9%
+beatles--let-it-be                   shown  77.3% /  64.2%  settled  83.1%  final  86.7% /  70.1%  latency median 417 ms (100% ≤ 1 beat)  predicted  49.7% (147)  2.9 s
+  chart "Something": linked (moved 0, ratio 2, matched 98%, roots agree 60%, jumps/bar 0.12)  majmin  64.6% →  65.7%  sevenths  54.1% →  44.2%
+beatles--something                   shown  57.5% /  39.8%  settled  63.0%  final  64.6% /  54.1%  latency median 326 ms (97% ≤ 1 beat)  predicted  36.7% (30)  2.1 s
+  chart "Just The Way You Are (Page 1)": linked (moved 0, ratio 1, matched 100%, roots agree 60%, jumps/bar 0.14)  majmin  50.6% →  50.7%  sevenths  30.7% →  32.2%
+billy-joel--just-the-way-you-are     shown  43.7% /  23.0%  settled  49.1%  final  50.6% /  30.7%  latency median 413 ms (58% ≤ 1 beat)  predicted  20.7% (92)  3.5 s
+  chart "It's Too Late": linked (moved 0, ratio 1, matched 100%, roots agree 66%, jumps/bar 0.05)  majmin  61.7% →  81.5%  sevenths  51.9% →  81.8%
+carole-king--its-too-late            shown  59.9% /  41.9%  settled  61.2%  final  61.7% /  51.9%  latency median 341 ms (86% ≤ 1 beat)  predicted  52.1% (144)  2.6 s
+michael-jackson--human-nature        shown  57.4% /  36.5%  settled  60.4%  final  62.3% /  43.8%  latency median 304 ms (95% ≤ 1 beat)  predicted  43.1% (181)  3.0 s
+  chart "Don't Stop Me Now": linked (moved 0, ratio 0.5, matched 100%, roots agree 67%, jumps/bar 0.07)  majmin  54.7% →  61.1%  sevenths  22.9% →  38.3%
+queen--dont-stop-me-now              shown  49.1% /  25.8%  settled  55.5%  final  54.7% /  22.9%  latency median 371 ms (53% ≤ 1 beat)  predicted  34.8% (66)  2.4 s
+stevie-wonder--higher-ground         shown  11.0% /   3.2%  settled   9.3%  final   7.6% /   2.1%  latency median 531 ms (37% ≤ 1 beat)  predicted   3.2% (156)  2.6 s
+MEAN shown majmin  50.8% sevenths  33.5% · final majmin  55.5% sevenths  39.4% · latency 386 ms, 75% within a beat
+MEAN linked chart (5 songs): majmin  63.7% →  68.9%, sevenths  46.0% →  54.9%

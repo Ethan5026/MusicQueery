@@ -118,9 +118,14 @@ export const useStandUi = create<{
   /** the fix-a-chord sheet (M7) */
   fixing: boolean
   setFixing: (v: boolean) => void
+  /** the link-a-chart sheet (M7) */
+  linking: boolean
+  setLinking: (v: boolean) => void
 }>((set) => ({
   calibrating: false,
   setCalibrating: (calibrating) => set({ calibrating }),
   fixing: false,
   setFixing: (fixing) => set({ fixing }),
+  linking: false,
+  setLinking: (linking) => set({ linking }),
 }))

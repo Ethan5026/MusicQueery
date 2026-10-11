@@ -100,6 +100,18 @@ export function FixChord({ tl, m }: { tl: Timeline; m: Moment }) {
             Every <Acc text={formatChord(ev.chord.kind === 'chord' ? chordToWritten(ev.chord, inst) : ev.chord)} /> in this song ({same.length})
           </label>
         )}
+        {ev && tl.id.startsWith('spotify:') && (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              close()
+              useStandUi.getState().setLinking(true)
+            }}
+          >
+            Wrong all over? Link an iReal chart…
+          </button>
+        )}
         <div className="cal-res">
           {edits.length > 0 ? (
             <button type="button" className="btn" onClick={() => (setEdits([]), close())}>

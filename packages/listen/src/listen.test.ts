@@ -1,5 +1,7 @@
-import { Timeline } from '@mq/model'
+import { type Chart, Timeline } from '@mq/model'
+import { DEMO_CHART, expandChart, formatChord, parseChord, pc, transposeChord } from '@mq/theory'
 import { describe, expect, test } from 'vitest'
+import { alignChart } from './align'
 import { BeatTracker, beatF } from './beats'
 import { STATES, stateOfSymbol, stateText } from './chords'
 import { FFT, hann } from './fft'
@@ -7,6 +9,7 @@ import { Frontend } from './frontend'
 import { LiveDecoder } from './live'
 import { decodeOffline } from './offline'
 import { encodeHarte, scoreBeats } from './score'
+import { boundaryF, findSections } from './sections'
 import { barPhase, liveTimeline, mergeLive } from './timeline'
 
 const SR = 22050
@@ -183,5 +186,95 @@ describe('live timelines', () => {
     const m = mergeLive(a, b)
     expect(m.chords.map((c) => c.symbol)).toEqual(['C', 'Am', 'Dm', 'G'])
     expect(Timeline.safeParse(m).success).toBe(true)
+  })
+})
+
+describe('linking a chart', () => {
+  // a "recording" of the demo chart: twice through, a minor third up, 4 bars dropped from the second chorus,
+  // and a quarter of the beats heard as a wrong chord
+  function recording(): { tl: ReturnType<typeof liveTimeline>; truth: string[] } {
+    const played = [...expandChart(DEMO_CHART), ...expandChart(DEMO_CHART).filter((_, i) => i < 8 || i >= 12)]
+    const iv = { steps: 2, semis: 3 }
+    const beats: number[] = []
+    const chords: { startMs: number; endMs: number; symbol: string; confidence: number }[] = []
+    const truth: string[] = []
+    let t = 0
+    let seed = 7
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    for (const bar of played) {
+      for (const slot of bar.chords) {
+        for (let k = 0; k < slot.beats; k++) {
+          const c = parseChord(slot.symbol)!
+          const right = formatChord(transposeChord(c, iv))
+          truth.push(right)
+          const heard = rnd() < 0.25 ? ['C', 'G', 'Am', 'F', 'D♭', 'E'][Math.floor(rnd() * 6)]! : right
+          beats.push(t)
+          chords.push({ startMs: t, endMs: t + 500, symbol: heard, confidence: 0.6 })
+          t += 500
+        }
+      }
+    }
+    beats.push(t)
+    return { tl: liveTimeline({ id: 'spotify:track:7iN1s7xHE4ifF5povM6A48', durationMs: t, chords, beats, createdAt: '2026-10-11T12:00:00.000Z' }), truth }
+  }
+
+  test('finds the transposition, follows the dropped bars and repairs most wrong chords', () => {
+    const { tl, truth } = recording()
+    const r = alignChart(DEMO_CHART, tl)
+    expect(r.timeline).not.toBeNull()
+    expect(r.semis).toBe(3)
+    expect(r.ratio).toBe(1)
+    expect(r.jumpRate).toBeLessThan(0.1)
+    const rootOf = (s: string) => {
+      const c = parseChord(s)
+      return c && c.kind === 'chord' ? pc(c.root) : -1
+    }
+    const at = (cs: { startMs: number; endMs: number; symbol: string }[], ms: number) => cs.find((c) => c.startMs <= ms && ms < c.endMs)?.symbol ?? 'N.C.'
+    let before = 0
+    let after = 0
+    truth.forEach((s, i) => {
+      const ms = i * 500 + 250
+      if (rootOf(at(tl.chords, ms)) === rootOf(s)) before++
+      if (rootOf(at(r.timeline!.chords, ms)) === rootOf(s)) after++
+    })
+    expect(before / truth.length).toBeLessThan(0.85)
+    expect(after / truth.length).toBeGreaterThan(0.95)
+    expect(r.timeline!.chartId).toBe(DEMO_CHART.id)
+    expect(r.timeline!.bars.some((b) => b.section === 'B')).toBe(true)
+    expect(Timeline.safeParse(r.timeline).success).toBe(true)
+  })
+
+  test('refuses a chart from another song', () => {
+    const { tl } = recording()
+    const pop: Chart = {
+      schema: 'mq.chart/1',
+      id: 'pop-loop',
+      title: 'Pop loop',
+      key: { tonic: 'C', mode: 'major' },
+      meter: { num: 4, den: 4 },
+      bars: ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'F'].map((s) => ({ chords: [{ symbol: s, beats: 4 }] })),
+    }
+    expect(alignChart(pop, tl).timeline).toBeNull()
+  })
+})
+
+describe('sections', () => {
+  test('letters an A A B A form from its chords', () => {
+    const A = ['C', 'Am', 'F', 'G', 'E', 'Am', 'D', 'G']
+    const B = ['F', 'F', 'D', 'D', 'B♭', 'B♭', 'E', 'E']
+    const form = [...A, ...A, ...B, ...A]
+    const beats = Array.from({ length: form.length * 4 + 1 }, (_, i) => i * 500)
+    const tl = liveTimeline({
+      id: 'spotify:track:7iN1s7xHE4ifF5povM6A48',
+      durationMs: form.length * 2000,
+      chords: form.map((symbol, i) => ({ startMs: i * 2000, endMs: (i + 1) * 2000, symbol })),
+      beats,
+      createdAt: '2026-10-11T12:00:00.000Z',
+      phase: 0,
+    })
+    const s = findSections(tl)
+    expect(s.map((x) => x.label).join('')).toBe('AABA')
+    expect(s.map((x) => x.startMs)).toEqual([0, 16000, 32000, 48000])
+    expect(boundaryF([0, 16000, 32000, 48000], [0, 17000, 32000, 60000])).toBeCloseTo(2 / 3)
   })
 })

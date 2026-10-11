@@ -229,11 +229,54 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   `performance.now()`, silent buffers). The real sound, latency and timing are checked by the SP5 card on the iPhone. Without
   Web Audio, Play explains why on the band card instead of opening a paused Stand.
 
+- **D-64** (M7, SP7 offline) `packages/listen` (pure TS, Worker on the phone, Node for evaluation) decodes chords from audio:
+  decimate to ~11 kHz → STFT 4096/hop 512 → log-frequency spectrum (3 bins a semitone, A1–C7), running tuning, whitening,
+  NNLS note activations (Chordino-style) → bass + treble chroma; an online beat tracker (spectral-flux onsets ~86 Hz,
+  autocorrelation tempo with a 110 BPM prior, Ellis DP, beats final one period late); 61 states (maj, min, 7, maj7, m7 × 12
+  + N.C.), binary templates (treble 20 × cosine + bass 8 × log root share, 7ths −0.6), beat HMM stay 0.85 with a key-aware
+  change prior; chorus consensus averages each beat's evidence with its repeats (beat-chroma self-similarity, diagonal
+  window 12, threshold 0.8). Learned per-quality profiles scored no better (65.9 vs 65.7 majmin), so none are shipped.
+  Measured on the 7 human-annotated pop songs per beat (majmin/sevenths): truth beats 65.7/46.9, + consensus 70.5/52.3.
+  The yardstick is the companion's MIREX rules ported to TS (`score.ts`); `room.ts` simulates speaker + room + mic.
+- **D-65** (M7) Live display: the shown chord is the forward filter carried over the last 0.2 s of frames, no hold, and the
+  Predicted chord at that moment gets +8 × its confidence; beats 4 behind are settled by short Viterbi; a segment's end
+  re-decodes it with two-way consensus for saving. Clean: shown 61.2% majmin, 291 ms behind a change (84% within a beat);
+  simulated room 50.8%, 386 ms. Mic chain: raw `getUserMedia` (EC/NS/AGC off), its own AudioContext, `audioSession`
+  'play-and-record' while listening; an AudioWorklet posts 2048-sample chunks straight to the decoder Worker over a
+  MessagePort; the main thread sends anchors (context frame → `performance.now()` via `getOutputTimestamp` →
+  `clock.positionMs`) 5×/s, so the Worker works in track ms. A seek, pause, track change or stop ends the segment; iOS
+  stops the mic in the background, so hiding the app stops listening.
+- **D-66** (M7, D-09) Live timelines are kept apart from analysed ones so a listen never replaces an analysis: IndexedDB
+  `timelines/live:<id>`, store `PUT /api/live/:id` (KV `lv:`, Spotify-token auth like D-46, `source` must be 'live'),
+  public GET. `loadTimeline` falls back to them when the store has no analysis; a later listen is laid over an earlier one
+  (`mergeLive`), and the earlier one is the decoder's prior (+3 × confidence) and the look-ahead. On a live timeline
+  everything ahead of now is a prediction: Up next reads "Up next · Predicted" in grey. The badge says "Listening live"
+  while the mic is on and "Heard live" for a saved listen (a wording beyond D-04's three).
+- **D-67** (M7) Chord fixes are stored per track apart from timelines (IndexedDB v3 `edits`, `PUT /api/edits/:id` → KV `ed:`,
+  ≤ 500), so re-analysis and new listens keep them; they apply by time span over whatever is shown (`effectiveChords`).
+  Tap the chord on Stand: the picker shows written pitch for the instrument and stores concert; "every <chord> in this
+  song" fixes all of them at once; "Undo all my fixes".
+- **D-68** (M7) Linking a chart: `alignChart` runs Jump Alignment of the chart's playing order on the timeline's chord labels
+  (so it works on the phone, for analysed and live timelines): next beat 0, hold/skip −1.5, bar line → any bar line −3,
+  form end → top −1, free (intro/solo) −0.4 a beat; 12 transpositions × tempo ratios ½, 1, 2. It is trusted only when
+  roots agree on ≥ 50% of matched beats and it jumps ≤ 0.18 times a bar (right charts 0.03–0.14, another song's 0.17–0.48:
+  5/5 refused). Where it matches, the chart's chord names and rehearsal marks replace the timeline's. iReal Pop 400 on
+  5 truth songs, live decode: clean majmin 69.7 → 80.4, sevenths 50.5 → 64.8; simulated room 63.7 → 68.9, 46.0 → 54.9.
+  The link (settings `link:<id>`) is re-aligned whenever the track opens.
+- **D-69** (M7) SP7 tooling: Settings → Diagnostics → Mic test listens even on an analysed track and scores the shown chord
+  against the analysis per beat as it plays (root + third), with mic settings, level and CPU; Stop saves and uploads the
+  live timeline, and `pnpm --filter @mq/listen score-live` scores it on the PC against the human truth with the best time
+  shift (the mic offset). Playwright gets a fake mic (`e2e/fake-mic.ts`) that streams a synthesised loop into the real
+  decoder Worker, as D-63 did for the band.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
   on standards and none on Let It Be (verse and chorus share chords), so analysed timelines carry no section labels. Decide by
   M5 (lead-sheet rehearsal letters) or M8 (Song map): chord-repetition analysis, a structure model, or chart alignment.
   *M5: the lead sheet works without letters on analysed tracks (bar numbers, key marks); deferred to M7 or M8.*
+  *M7: chord-repetition sections (`findSections`, bar self-similarity stripes) scored boundary F@3 s 0.65 on human chords,
+  0.43 on the PC's analysis and 0.23 on live chords (4 songs, Isophonics segments), so automatic letters are not shown;
+  a linked chart's rehearsal marks are the sections for now (D-68). Decide in M8 (Song map).*
 - **P-06** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
   Mas Que Nada's F minor (B♭m7–E♭7 bars). Main key right on 3 of 4 truth tracks. Revisit the emission weights with the truth set.

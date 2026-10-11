@@ -18,6 +18,7 @@ import { FixChord } from './FixChord'
 import { InstrumentSeg } from './InstrumentSeg'
 import { Keyboard } from './Keyboard'
 import { LeadSheet } from './LeadSheet'
+import { LinkChart } from './LinkChart'
 import { Confidence, ListenButton, ListenChip, ListeningWait } from './Listen'
 import { LoopBand, LoopButton } from './Loop'
 import { frameBus, useLandscape, useMoment, useStandUi, useSync } from './live'
@@ -27,17 +28,18 @@ import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from
 
 
 export function Stand() {
-  const { timeline, live, edits, meta, status, driver } = useSession()
+  const { timeline, live, linked, edits, meta, status, driver } = useSession()
   const settings = useSettings()
-  // while listening, the live view replaces the timeline; the track's fixes go on top of either (M7)
+  // while listening, the live view replaces the timeline, else a linked chart does; fixes go on top (M7)
   const shown = useMemo(() => {
-    const base = live ?? timeline
+    const base = live ?? linked?.timeline ?? timeline
     return base ? withEdits(base, edits) : null
-  }, [live, timeline, edits])
+  }, [live, linked, timeline, edits])
   const m = useMoment(shown, settings)
   const land = useLandscape()
   const calibrating = useStandUi((s) => s.calibrating)
   const fixing = useStandUi((s) => s.fixing)
+  const linking = useStandUi((s) => s.linking)
   let body
   if (shown && meta && m)
     body = land ? (
@@ -53,6 +55,7 @@ export function Stand() {
       {body}
       {calibrating && <Calibrate />}
       {fixing && shown && m && <FixChord tl={shown} m={m} />}
+      {linking && meta && <LinkChart title={meta.title} />}
     </>
   )
 }
@@ -263,6 +266,7 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
   const listening = useListen((s) => s.status === 'on')
   const liveConf = useListen((s) => s.now?.confidence ?? null)
   const isLive = tl.source === 'live'
+  const linkedTitle = useSession((s) => (s.linked && !s.live ? s.linked.link.title : null))
   const inst = settings.instrument
   const home = homeKey(tl, inst)
   const bpm = tempoAt(tl, m.positionMs)
@@ -364,7 +368,7 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
 
       <section className={`card next${isLive ? ' pred' : ''}`} aria-label="Up next">
         <div className="next-h">
-          <span className="lbl">{isLive ? 'Up next · Predicted' : 'Up next'}</span>
+          <span className="lbl">{isLive ? 'Up next · Predicted' : linkedTitle ? `Up next · ${linkedTitle} chart` : 'Up next'}</span>
           {barPos && (
             <span className="lbl">
               Bar {barPos.n} / {barPos.total}

@@ -1,0 +1,5 @@
+  chart "Something": REJECTED (moved 0, ratio 1, matched 100%, roots agree 68%, jumps/bar 0.27)  majmin  88.1% →  88.1%  sevenths  78.2% →  78.2%
+  chart "Just The Way You Are (Page 1)": REJECTED (moved 10, ratio 2, matched 99%, roots agree 60%, jumps/bar 0.48)  majmin  63.5% →  63.5%  sevenths  45.9% →  45.9%
+  chart "It's Too Late": REJECTED (moved 9, ratio 2, matched 100%, roots agree 57%, jumps/bar 0.24)  majmin  59.6% →  59.6%  sevenths  35.7% →  35.7%
+  chart "Don't Stop Me Now": REJECTED (moved 0, ratio 1, matched 100%, roots agree 70%, jumps/bar 0.32)  majmin  78.9% →  78.9%  sevenths  63.9% →  63.9%
+  chart "Let It Be": REJECTED (moved 10, ratio 2, matched 100%, roots agree 30%, jumps/bar 0.17)  majmin  58.4% →  58.4%  sevenths  28.9% →  28.9%

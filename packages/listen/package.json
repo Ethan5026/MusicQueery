@@ -9,7 +9,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
     "eval": "esbuild scripts/eval.ts --bundle --platform=node --format=esm --outfile=dist/eval.mjs --log-level=warning && node dist/eval.mjs",
-    "sweep": "esbuild scripts/sweep.ts --bundle --platform=node --format=esm --outfile=dist/sweep.mjs --log-level=warning && node dist/sweep.mjs"
+    "sweep": "esbuild scripts/sweep.ts --bundle --platform=node --format=esm --outfile=dist/sweep.mjs --log-level=warning && node dist/sweep.mjs",
+    "score-live": "esbuild scripts/score-live.ts --bundle --platform=node --format=esm --outfile=dist/score-live.mjs --log-level=warning && node dist/score-live.mjs",
+    "sections": "esbuild scripts/sections.ts --bundle --platform=node --format=esm --outfile=dist/sections.mjs --log-level=warning && node dist/sections.mjs"
   },
   "dependencies": {
     "@mq/model": "workspace:*",

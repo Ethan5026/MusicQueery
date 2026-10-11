@@ -5,10 +5,10 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**M7 · Listening live + Predicted — not started.** (M6 Backing tracks is built and deployed; its iPhone audio test (SP5)
-and Fire TV loop check wait on the user, see `handoffs/M6-backing.md` → Open. M5b's live inbox check is still open too.)
-Read `handoffs/DECISIONS.md`, then `handoffs/M6-backing.md`. Its Next prompt names what M7 needs.
-(M7, M8 and M9 are independent.)
+**M8 · Map, Coach, polish — not started** (or M9 Melody + Solo view; they are independent). M7 Listening live is built
+and deployed; its iPhone mic test over speakers (SP7) waits on the user, see `handoffs/M7-listen.md` → Open, as do M6's
+SP5 audio test and M5b's live inbox check. Read `handoffs/DECISIONS.md`, then `handoffs/M7-listen.md`; its Next prompt
+names what M8 needs.
 
 ## Session protocol (keeps context small)
 
@@ -30,6 +30,7 @@ Read `handoffs/DECISIONS.md`, then `handoffs/M6-backing.md`. Its Next prompt nam
 - `apps/web` — the PWA (Vite + React). `apps/worker` — Cloudflare Worker: serves the PWA and `/api/*` (D-23)
 - `packages/theory`, `packages/model` — pure TS packages (M2). iReal corpus: `pnpm --filter @mq/theory corpus`
 - `packages/band` — the backing band's arranger, built-in tunes and drills (M6); `apps/web/src/audio` plays it
+- `packages/listen` — live chord decoder, chart alignment, scoring (M7): `pnpm --filter @mq/listen eval --live` on the truth audio
 - `companion/` — Windows companion, Python 3.12 + uv (M3): `pnpm companion <cmd>` (`analyse`, `watch`, `queue`, `inbox`, `login`…)
 - Commands: `pnpm dev`, `pnpm test`, `pnpm e2e` (Playwright WebKit), `pnpm lint`, `pnpm typecheck`, `pnpm ship` (deploy), `pnpm tail` (live device logs)
 - `design/sketchbook.html` — approved design source (published as an artifact; URL in 01-design.md)
