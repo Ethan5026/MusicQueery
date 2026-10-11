@@ -65,8 +65,8 @@ Worker store `PUT/GET /api/timelines/:id` with a bearer secret; the phone fetche
 - Chordonomicon (CSV in `%LOCALAPPDATA%\MusicQueery\dl\chordonomicon`, index `%LOCALAPPDATA%\MusicQueery\chordonomicon.sqlite`):
   UG charts vs human 0.84–0.92 at chord-change level; coverage 4/7 classics, 3/10 playlist. Built as chart names (D-40,
   `companion/src/mqc/charts.py`, tests `tests/test_charts.py`); a new PC runs `pnpm companion chart-index` after the download
-- Store: 22 timelines. Re-analysed with the new default: all with saved audio. Still on the old 7ths output (need a replay):
-  Zanzibar, Even Flow, As, Got to Get You Into My Life, It's a Man's Man's Man's World
+- Store: 22 timelines, all re-analysed with D-38 + D-40 (6 playlist tracks replayed): 17 plain recognition, 5 with chart names
+  (Let It Be, Just the Way You Are, It's Too Late, Your Song, Zanzibar); charts rejected for Something, Fly Me, As, Cliffs of Dover
 
 ## Open
 - [ ] user: said the app shows no updates and "looks nothing like the artifact" (2026-10-11). Expected: it is still the M1 debug
