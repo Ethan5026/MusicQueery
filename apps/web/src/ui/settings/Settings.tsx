@@ -36,6 +36,19 @@ export function SettingsTab() {
           />
         </div>
         <div className="setrow">
+          <span className="lbl">Chord style</span>
+          <Seg
+            name="set-chords"
+            label="Chord style"
+            value={s.chords}
+            options={[
+              ['text', 'maj7 · m7'],
+              ['symbols', 'Δ7 · –7'],
+            ]}
+            onChange={(chords) => s.set({ chords })}
+          />
+        </div>
+        <div className="setrow">
           <span className="lbl">Play suggestions</span>
           <Seg
             name="set-mode"

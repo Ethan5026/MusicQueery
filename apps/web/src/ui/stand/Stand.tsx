@@ -9,7 +9,6 @@ import { useListen } from '../../listen/listener'
 import { type Driver, activeTransport, clock, retryFollow, useApp, useSession } from '../../services'
 import { login } from '../../spotify/auth'
 import { type Settings, useSettings } from '../../store/settings'
-import { withEdits } from '../../timeline/edits'
 import type { TrackMeta } from '../../timeline/library'
 import { AnalyseButton } from '../AnalyseButton'
 import { Acc, ChordSym, Seg, SourceBadge, SyncBadge } from '../atoms'
@@ -21,20 +20,16 @@ import { LeadSheet } from './LeadSheet'
 import { LinkChart } from './LinkChart'
 import { Confidence, ListenButton, ListenChip, ListeningWait } from './Listen'
 import { LoopBand, LoopButton } from './Loop'
-import { frameBus, useLandscape, useMoment, useStandUi, useSync } from './live'
+import { frameBus, useLandscape, useMoment, useShown, useStandUi, useSync } from './live'
 import { type PlayView, playView } from './play'
 import { Staff } from './Staff'
 import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from './view'
 
 
 export function Stand() {
-  const { timeline, live, linked, edits, meta, status, driver } = useSession()
+  const { meta, status, driver } = useSession()
   const settings = useSettings()
-  // while listening, the live view replaces the timeline, else a linked chart does; fixes go on top (M7)
-  const shown = useMemo(() => {
-    const base = live ?? linked?.timeline ?? timeline
-    return base ? withEdits(base, edits) : null
-  }, [live, linked, timeline, edits])
+  const shown = useShown()
   const m = useMoment(shown, settings)
   const land = useLandscape()
   const calibrating = useStandUi((s) => s.calibrating)

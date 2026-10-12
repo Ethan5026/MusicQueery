@@ -1,7 +1,10 @@
-// App shell: five tabs (D-12). Stand, Tracks (M4 slice) and Settings work; Map and Coach arrive in M8.
+// App shell: five tabs (D-12): Stand, Tracks, Map and Coach (M8), Settings.
 // In landscape the Stand tab fills the screen with the lead sheet (M5).
 import { type Tab, TABS, useSession } from '../services'
 import { TabIcon } from './atoms'
+import { Boundary } from './Boundary'
+import { CoachTab } from './coach/Coach'
+import { MapTab } from './map/SongMap'
 import { SettingsTab } from './settings/Settings'
 import { useLandscape } from './stand/live'
 import { Stand } from './stand/Stand'
@@ -16,18 +19,13 @@ export function Shell() {
   return (
     <div className={`shell${sheet ? ' land' : ''}`}>
       <main className={`view view-${tab}`}>
-        {tab === 'stand' && <Stand />}
-        {tab === 'tracks' && <TracksTab />}
-        {tab === 'map' && (
-          <Later title="Song map" text="Every pass of the tune as a strip of bars, coloured by key, with a tap to jump and loop." />
-        )}
-        {tab === 'coach' && (
-          <Later
-            title="Scale coach"
-            text="The next eight changes with a scale for each under the Inside, Bebop and Colour lenses, and ii–V–I guide-tone tips."
-          />
-        )}
-        {tab === 'settings' && <SettingsTab />}
+        <Boundary key={tab} name={tab}>
+          {tab === 'stand' && <Stand />}
+          {tab === 'tracks' && <TracksTab />}
+          {tab === 'map' && <MapTab />}
+          {tab === 'coach' && <CoachTab />}
+          {tab === 'settings' && <SettingsTab />}
+        </Boundary>
       </main>
       <nav className="tabs" aria-label="App tabs" hidden={sheet}>
         {TABS.map((t) => (
@@ -43,20 +41,6 @@ export function Shell() {
           </button>
         ))}
       </nav>
-    </div>
-  )
-}
-
-function Later({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="page">
-      <h1 className="page-h">{title}</h1>
-      <div className="empty">
-        <span className="ch">
-          <span className="r">Soon</span>
-        </span>
-        <p>{text}</p>
-      </div>
     </div>
   )
 }

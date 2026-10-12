@@ -175,6 +175,23 @@ test('a track with no timeline says so; nothing playing shows the empty state', 
   await expect(hero(page)).toHaveText(chordAt(30_000), { timeout: 8000 })
 })
 
+test('Map and Coach follow Spotify: an unanalysed song says so, an analysed one shows its map and changes', async ({ page }) => {
+  sp.set({ trackId: UNKNOWN_ID })
+  await page.goto('/')
+  await expect(page.getByTestId('not-analysed')).toBeVisible()
+  await page.locator('nav.tabs').getByRole('button', { name: 'Map' }).click()
+  await expect(page.getByTestId('no-track')).toContainText('Unknown Song has no chords yet')
+  await page.getByRole('button', { name: 'Open Stand' }).click()
+  await expect(page.getByTestId('not-analysed')).toBeVisible()
+  sp.set({ trackId: LET_IT_BE_ID })
+  await expect(hero(page)).toHaveText(chordAt(30_000), { timeout: 8000 })
+  await page.locator('nav.tabs').getByRole('button', { name: 'Map' }).click()
+  await expect(page.getByTestId('map-rows').locator('.mrow').first()).toContainText('0:00')
+  await expect(page.getByLabel('Key areas')).toContainText('C major')
+  await page.locator('nav.tabs').getByRole('button', { name: 'Coach' }).click()
+  await expect(page.locator('.ctab button.crow.on .ch')).toHaveText(chordAt(30_000))
+})
+
 test('landscape: lead sheet + rail at the same position, tap a bar to seek', async ({ page }) => {
   await page.goto('/')
   await expect(hero(page)).toHaveText(chordAt(30_000))

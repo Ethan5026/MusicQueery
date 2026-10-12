@@ -3,6 +3,8 @@ import type { TimelineSource } from '@mq/model'
 import type { MomentChord } from '@mq/theory'
 import type { CSSProperties } from 'react'
 import type { SyncState } from '../clock/sync'
+import { useSettings } from '../store/settings'
+import { styleQuality } from './chordStyle'
 
 const dbl = (s: string): string => s.replace(/♯♯/g, '𝄪').replace(/♭♭/g, '𝄫')
 
@@ -26,6 +28,7 @@ export function Acc({ text }: { text: string }) {
 
 /** A chord lettered like a Real Book chart: root, then the quality raised and smaller. */
 export function ChordSym({ chord, className, style }: { chord: MomentChord | null; className?: string; style?: CSSProperties }) {
+  const chordStyle = useSettings((s) => s.chords)
   const cls = `ch${className ? ' ' + className : ''}`
   if (!chord || !chord.root)
     return (
@@ -39,7 +42,7 @@ export function ChordSym({ chord, className, style }: { chord: MomentChord | nul
         <Acc text={chord.root} />
       </span>
       <span className="q">
-        <Acc text={chord.quality + (chord.bass ? `/${chord.bass}` : '')} />
+        <Acc text={styleQuality(chord.quality, chordStyle) + (chord.bass ? `/${chord.bass}` : '')} />
       </span>
     </span>
   )

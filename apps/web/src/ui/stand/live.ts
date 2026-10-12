@@ -2,16 +2,27 @@
 // every frame (progress bar, playhead), the sync badge state, and the phone's orientation.
 import type { Timeline } from '@mq/model'
 import { type Moment, analyseTimeline, moment } from '@mq/theory'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { create } from 'zustand'
 import { type SyncState, sameSync, syncState } from '../../clock/sync'
 import { perf } from '../../perf'
 import { band } from '../../audio/engine'
 import { type Driver, clock, manual, transportFor, useApp, useSession } from '../../services'
 import type { Settings } from '../../store/settings'
+import { withEdits } from '../../timeline/edits'
 
 /** Per-frame listeners: position and duration in ms. Registered by refs, so React stays out of it (D-44). */
 export const frameBus = new Set<(pos: number, dur: number) => void>()
+
+/** The timeline Stand, Map and Coach show: while listening the live view, else a linked chart, else the open
+ *  timeline; the player's chord fixes on top (M7). */
+export function useShown(): Timeline | null {
+  const { timeline, live, linked, edits } = useSession()
+  return useMemo(() => {
+    const base = live ?? linked?.timeline ?? timeline
+    return base ? withEdits(base, edits) : null
+  }, [live, linked, timeline, edits])
+}
 
 /** theory.moment() at the active clock, recomputed when the beat or the chord changes. */
 export function useMoment(tl: Timeline | null, s: Settings): Moment | null {
