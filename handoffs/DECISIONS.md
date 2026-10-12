@@ -274,6 +274,13 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   75% over 8–31 s at −2.05 s), above the simulated room (D-65). As saved they are ~2.5 s late (majmin 10%), so the
   exit is not met until the offset is found and corrected and 3 songs are re-tested. `score-live` searches ±5 s per
   stretch of listening.
+- **D-71** (M7 follow-up, user) The mic's timing is parked. Scored against the analysis in 60 s windows (`score-live --track`),
+  the saved chords' lateness holds steady within a listen but changes from one start to the next: As 0.8 s over 6½ min,
+  Let It Be 1.9, 2.4 and 3.75 s (so it is not the speaker's lag, and probably iOS's mic buffering). The user stopped here:
+  Spotify sync of analysed timelines is what matters. Kept: the echo test (phone round trip, taken off the anchors when
+  measured), "Mic lag" shown on the Mic test card but never written into a speaker offset (that would move Stand's sync),
+  screen kept on while listening. If it comes back: an inaudible 18–20 kHz probe measured at every start, then
+  continuously. SP7's "3 tracks ≥ 55%" exit is not met for saved times; recognition itself is (D-70).
 
 ## Pending
 

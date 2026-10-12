@@ -10,13 +10,13 @@
 // Timing (SP7 follow-up, D-70: saved chords were ~2.5 s late on the iPhone). A mic frame's track time is the
 // SpotifyClock position (which includes the speaker's calibrated offset) at the moment the sample was *recorded*.
 // `getOutputTimestamp` gives when a frame is *played*, so the phone's round trip (output → input, measured by the
-// echo test and kept per phone) is taken off. What is still late on an analysed track is the speaker's lag behind
-// Spotify's report: test mode measures it (`bestShift`) and can store it as that speaker's offset.
+// echo test and kept per phone) is taken off. Test mode measures what is still late on an analysed track
+// (`bestShift`) for the Mic test card. It is not corrected: on the iPhone it held steady within a listen but changed
+// from one start to the next (0.8–3.75 s, D-71), and the user parked the mic's timing.
 import type { Timeline } from '@mq/model'
 import { LIVE_GENERATOR, type Shift, bestShift, chirp, findEcho, liveTimeline, mergeLive } from '@mq/listen'
 import { canonical, parseChord, pc } from '@mq/theory'
 import { create } from 'zustand'
-import { offsetFor, setOffset } from '../clock/offsets'
 import { log } from '../debug/log'
 import { clock, holdWake, useSession } from '../services'
 import { chordAt } from '../timeline/fetch'
@@ -374,30 +374,6 @@ function measureShift(m: NowMsg): void {
 /** Is the measured shift clear enough to store? Enough beats, a good match, and well above the song's other repeats. */
 export function shiftUsable(h: Shift | null): h is Shift {
   return !!h && h.beats >= 24 && h.majmin >= 0.6 && h.majmin - h.runnerUp >= 0.1
-}
-
-/** Stores the measured shift into the playing speaker's offset (D-51), so Stand and the mic both line up, and
- *  starts a new segment (the current one's chords were stamped with the old offset). */
-export function applyHeardShift(): void {
-  const h = useListen.getState().heard
-  const device = clock.last?.deviceId ?? null
-  if (!shiftUsable(h) || !device) return
-  const before = offsetFor(device)
-  const ms = before + h.shiftMs
-  setOffset(device, ms, clock.last?.deviceName ?? null)
-  log('info', 'listen.offset', {
-    device: clock.last?.deviceName ?? device,
-    before,
-    ms,
-    shift: h.shiftMs,
-    majmin: h.majmin,
-    at0: h.at0,
-    beats: h.beats,
-    runnerUp: h.runnerUp,
-  })
-  send({ type: 'segment', reason: 'offset' })
-  lastScoredBeat = -1
-  useListen.setState({ heard: null, agree: { hit: 0, n: 0 } })
 }
 
 // ---------------------------------------------------------------- echo test

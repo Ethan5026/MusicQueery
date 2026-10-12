@@ -3,11 +3,12 @@
 // level, the worklet's and the decoder's CPU per second of audio, and how often the live chord agrees with the
 // PC's analysis (root + third, per beat, as shown, so the display delay counts). Send logs the numbers; the live
 // timeline is saved and uploaded when it stops, for scoring on the PC (`pnpm --filter @mq/listen score-live`).
-// Timing (D-70): Echo test measures the phone's own mic round trip; once ~30 s of chords have settled, "Speaker lag"
-// shows the shift that lines them up with the analysis, and Use stores it as this speaker's offset (D-51).
+// Timing (D-70, D-71): Echo test measures the phone's own mic round trip; once ~20 s of chords have settled, "Mic lag"
+// shows the shift that lines them up with the analysis. It is shown only: it changes each time the mic starts, so
+// it must not go into the speaker's offset, which Stand's Spotify sync uses.
 import { offsetFor } from '../../clock/offsets'
 import { flush, log } from '../../debug/log'
-import { applyHeardShift, clearEcho, micRoundTripMs, runEchoTest, shiftUsable, startListening, stopListening, useListen } from '../../listen/listener'
+import { clearEcho, micRoundTripMs, runEchoTest, shiftUsable, startListening, stopListening, useListen } from '../../listen/listener'
 import { clock, useSession } from '../../services'
 
 const secs = (ms: number): string => `${ms > 0 ? '+' : ms < 0 ? '−' : ''}${(Math.abs(ms) / 1000).toFixed(2)} s`
@@ -50,7 +51,7 @@ export function MicTestCard() {
       <p className="hint">
         Play an analysed song on a speaker, start this, and leave the phone where you practise. It compares what the mic
         hears with the PC’s chords as the song plays. Stop saves the live chords for scoring on the PC. Run the echo test
-        once (Spotify paused, phone volume up), then let the song play until the speaker lag shows and tap Use.
+        once (Spotify paused, phone volume up), then let the song play until the mic lag shows.
       </p>
       <div className="row">
         <button className="primary" onClick={() => (running ? stopListening('test') : void startListening('test'))} disabled={status === 'starting'}>
@@ -93,15 +94,14 @@ export function MicTestCard() {
           </button>
           {roundTrip !== null && echo.status !== 'running' && <button onClick={clearEcho}>Forget</button>}
         </dd>
-        <dt>Speaker lag</dt>
+        <dt>Mic lag</dt>
         <dd className={heard ? (usable ? 'ok' : 'warn') : ''}>
           {heard
             ? `${secs(heard.shiftMs)} → ${Math.round(heard.majmin * 100)}% (as is ${Math.round(heard.at0 * 100)}%, next best ${Math.round(heard.runnerUp * 100)}%, ${heard.beats} beats)`
             : running
               ? 'measuring after ~20 s of settled chords…'
               : '–'}
-          {` · ${deviceName} offset ${secs(offsetFor(device))}`}{' '}
-          {usable && device && Math.abs(heard.shiftMs) >= 100 && <button onClick={applyHeardShift}>Use</button>}
+          {` · ${deviceName} offset ${secs(offsetFor(device))}`}
         </dd>
         <dt>Saved</dt>
         <dd>{saved ? `${saved} listen${saved > 1 ? 's' : ''} saved` : '–'}</dd>
