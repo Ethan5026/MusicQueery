@@ -27,9 +27,11 @@ def analyse_audio(
     beats: A.Beats | None = None,
     log=print,
     sp=None,
+    melody_audio: np.ndarray | None = None,
 ) -> dict:
     """With `sp` (a Spotify client), a published chart for the track supplies the chord names when its alignment
-    agrees with what we hear (D-40)."""
+    agrees with what we hear (D-40). With `melody_audio` (the capture, stereo if possible) the lead melody is
+    transcribed too (M9)."""
     t0 = time.time()
     beats = beats or A.track_beats(audio, sr)
     ch = A.recognise(audio, sr, beats, recogniser)
@@ -46,11 +48,32 @@ def analyse_audio(
         )
     if unparsed:
         log(f"  unparsed labels (stored as N.C.): {sorted(set(unparsed))}")
+    if melody_audio is not None:
+        add_melody(tl, melody_audio, sr, beats.beats, log)
     errs = A.validate_timeline(tl)
     if errs:
         raise ValueError(f"timeline invalid: {errs[:5]}")
     log(f"  analysed in {time.time() - t0:.0f} s: {A.summary(tl)}")
     return tl
+
+
+def add_melody(tl: dict, audio: np.ndarray, sr: int, beats_s: np.ndarray, log=print) -> None:
+    """Puts the lead melody into the timeline (M9, SP9). A failure only costs the melody, never the chords."""
+    from .melody import melody
+
+    try:
+        m = melody(audio, sr, beats_s, log=log)
+    except Exception as e:  # noqa: BLE001  the melody is optional
+        log(f"  melody failed: {e}")
+        return
+    end = tl["durationMs"]
+    tl["melody"] = [n for n in m.notes if n["startMs"] < end]
+    for n in tl["melody"]:
+        n["endMs"] = min(n["endMs"], end)
+    log(
+        f"  melody: {len(tl['melody'])} notes from the {m.stem} stem, tuning {m.tuning * 100:+.0f} cents "
+        f"(separate {m.seconds['separate']:.0f} s, transcribe {m.seconds['transcribe']:.0f} s)"
+    )
 
 
 CHART_MIN_AGREEMENT = 0.80  # D-40: Something's capo chart (0.74) and Fly Me's (0.71) fall below; good charts 0.87–0.97
@@ -88,6 +111,7 @@ def analyse_track(
     device_name: str = "",
     retries: int = 1,
     log=print,
+    with_melody: bool = True,
 ) -> dict:
     meta = sp.track(track_id)
     log(f"{meta['name']} — {', '.join(a['name'] for a in meta['artists'])} [{track_id}]")
@@ -100,8 +124,17 @@ def analyse_track(
             if attempt == retries:
                 raise
     try:
-        audio = cap.track_audio(mono=True)
-        tl = analyse_audio(track_id, cap.duration_ms, audio, cap.rate, recogniser, log=log, sp=sp)
+        stereo = cap.track_audio(mono=False)
+        tl = analyse_audio(
+            track_id,
+            cap.duration_ms,
+            stereo.mean(axis=1),
+            cap.rate,
+            recogniser,
+            log=log,
+            sp=sp,
+            melody_audio=stereo if with_melody else None,
+        )
     finally:
         cap.delete()
     tl["title"] = meta["name"]  # not in the schema; stripped below, kept in the local copy
@@ -120,6 +153,7 @@ def analyse_track(
                     "id": tl["id"],
                     "title": meta["name"],
                     "chords": len(tl["chords"]),
+                    "melody": len(tl.get("melody", [])),
                 }
             ]
         )

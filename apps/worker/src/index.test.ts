@@ -206,6 +206,23 @@ test('the companion lists, marks and finishes requests; uploading the timeline c
   vi.unstubAllGlobals()
 })
 
+test('only the companion re-queues an analysed track (redo, M9), and the melody count is in the list', async () => {
+  mockSpotify()
+  const env = { ...makeEnv(), ALLOWED_SPOTIFY_USERS: 'ethan_gruening' }
+  await call(env, 'PUT', `/api/timelines/${QID}`, { body: timeline(QID), auth: SECRET })
+  expect(await (await phone(env, 'POST', 'good', { redo: true })).json()).toEqual({ id: QID, state: 'done' })
+  const r = await call(env, 'POST', `/api/queue/${QID}`, { body: { redo: true }, auth: SECRET })
+  expect(await r.json()).toMatchObject({ id: QID, state: 'queued', redo: true })
+  const melody = [{ startMs: 0, endMs: 250, midi: 64, confidence: 0.9, stem: 'vocals' }]
+  await call(env, 'PUT', `/api/timelines/${QID}`, { body: { ...timeline(QID), melody }, auth: SECRET })
+  expect((await call(env, 'GET', `/api/queue/${QID}`)).status).toBe(200) // done: the request is cleared
+  const list = (await (await call(env, 'GET', '/api/timelines', { auth: SECRET })).json()) as {
+    timelines: { id: string; meta: { melody?: number } }[]
+  }
+  expect(list.timelines.find((t) => t.id === QID)?.meta.melody).toBe(1)
+  vi.unstubAllGlobals()
+})
+
 // ---------------------------------------------------------------- live timelines and fixes (M7)
 
 function put(env: Env, path: string, token: string | null, body: unknown) {

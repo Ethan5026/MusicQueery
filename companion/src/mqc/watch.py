@@ -112,7 +112,7 @@ def watch(
             elif req:
                 waiting_note = ""
                 tid = req["id"]
-                if store.get(tid):
+                if not req.get("redo") and store.get(tid):
                     store.queue_delete(tid)
                     recent[tid] = ("done", time.monotonic())
                     continue

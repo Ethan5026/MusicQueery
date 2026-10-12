@@ -27,7 +27,7 @@ Older handoffs are history. Don't load them unless the current handoff points to
 | M6 | Backing tracks | `M6-backing.md` | In-app band plays a chart, iReal import, drills, Spotify play-along |
 | M7 | Listening live + Predicted | `M7-listen.md` | Mic chord detection, predicted chords, chart alignment, chord fixes |
 | M8 | Map, Coach, polish | `M8-polish.md` | All five tabs used in a week of real practice (built; practice week with the user) |
-| M9 | Melody + Solo view | `M9-melody.md` | The lead melody in your key on a big staff, with the scale below |
+| M9 | Melody + Solo view | `M9-melody.md` | The lead melody in your key on a big staff, with the scale below (built; play-along test with the user) |
 
 Milestones were finalised in S2 (D-22). Later stages may split or reorder them, and update this table if they do.
 

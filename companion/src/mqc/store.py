@@ -67,9 +67,13 @@ class Store:
         if r.status_code not in (200, 404):
             raise StoreError(f"queue {tid}: {r.status_code} {r.text[:200]}")
 
-    def queue_add(self, tid: str, title: str | None = None, artist: str | None = None) -> dict[str, Any]:
-        """Queue a track (as the phone does); one already stored comes back as `done`."""
-        body = {k: v for k, v in (("title", title), ("artist", artist)) if v}
+    def queue_add(
+        self, tid: str, title: str | None = None, artist: str | None = None, redo: bool = False
+    ) -> dict[str, Any]:
+        """Queue a track (as the phone does); one already stored comes back as `done` unless `redo` (M9)."""
+        body: dict[str, Any] = {k: v for k, v in (("title", title), ("artist", artist)) if v}
+        if redo:
+            body["redo"] = True
         r = self._http.post("/queue/" + urllib.parse.quote(tid, safe=":"), json=body, headers=self._auth())
         if r.status_code not in (200, 201):
             raise StoreError(f"queue POST {tid}: {r.status_code} {r.text[:200]}")

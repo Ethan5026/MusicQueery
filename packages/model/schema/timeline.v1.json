@@ -234,6 +234,46 @@
           "symbol"
         ]
       }
+    },
+    "melody": {
+      "description": "Lead melody (M9), ascending by startMs",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "midi": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 127
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "stem": {
+            "description": "Separated stem the note was heard in",
+            "type": "string",
+            "enum": [
+              "vocals",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "startMs",
+          "endMs",
+          "midi"
+        ]
+      }
     }
   },
   "required": [

@@ -487,3 +487,37 @@ button.hero-chord:focus-visible { outline: 2px solid var(--steel); outline-offse
 .crow.on { background: var(--brass-soft); border-radius: 8px; }
 .crow.pred .ch, .crow.pred .scn { color: var(--ink-2); }
 .map-t { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* ---------- Solo view (M9): the lead melody on a big staff, the scale below ----------
+   The roll moves under a fixed brass playhead; a note is a head plus a bar as long as it sounds. */
+.chips-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.chips-row .chips { flex: 1; min-width: 0; }
+.chips-row .mini-seg { flex: none; }
+.sl-card { padding: 10px 12px 6px; display: grid; gap: 4px; }
+.sl-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sl-top .inst-seg { margin-left: auto; }
+.sl-now { font-size: 40px; }
+.sl-next { display: inline-flex; align-items: baseline; gap: 6px; color: var(--ink-2); font-size: 13px; }
+.sl-next .ch { font-size: 22px; color: var(--ink-2); }
+.sl { position: relative; overflow: hidden; }
+.sl-staff { position: absolute; inset: 0 auto auto 0; }
+.sl-roll { position: absolute; top: 0; bottom: 0; overflow: hidden; }
+.sl-strip { position: absolute; top: 0; left: 0; will-change: transform; }
+.sl-svg { display: block; }
+.sl-ch { position: absolute; top: 2px; font-size: 21px; color: var(--ink); }
+.sl-ph { position: absolute; width: 2px; margin-left: -1px; background: var(--brass); border-radius: 1px; box-shadow: 0 0 0 3px var(--brass-soft); }
+.nh.sl { fill: var(--ink); }
+.sl-dur { fill: var(--brass-soft); }
+.st-nm.sl { fill: var(--ink); }
+.faint { opacity: .42; }
+.sl-rest { fill: var(--ink-2); font-family: var(--f-acc); text-anchor: middle; dominant-baseline: central; }
+.sl-scale { display: grid; gap: 4px; }
+.sl-wide svg { width: 100%; height: auto; }
+.sl-extra { font: 700 15px var(--f-label); color: var(--alert); }
+.sl-none { margin: 6px 0; }
+.sapp { height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 6px; min-height: 0; }
+.sapp .sheet-h .sl-top { flex: none; }
+.sapp .sl-now { font-size: 30px; }
+.sapp .sl-scale { min-height: 0; overflow: hidden; grid-template-rows: auto minmax(0, 1fr); }
+.sapp .sl-wide { min-height: 0; display: flex; justify-content: center; }
+.sapp .sl-wide svg { width: auto; height: 100%; max-width: 100%; }

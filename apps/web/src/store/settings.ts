@@ -9,6 +9,8 @@ import { idbGet, idbSet } from './idb'
 export type NotesView = 'staff' | 'keys'
 /** Stage = dark (default, for gigs), Paper = light, Auto follows the phone. */
 export type Theme = 'stage' | 'paper' | 'auto'
+/** Stand shows the chart, or the lead melody on a big staff (M9) */
+export type StandView = 'chart' | 'solo'
 
 export interface Settings {
   instrument: InstrumentId
@@ -21,9 +23,10 @@ export interface Settings {
   nextScale: boolean
   /** chord qualities as text (maj7, m7) or symbols (Δ7, –7) */
   chords: ChordStyle
+  stand: StandView
 }
 
-export const DEFAULT_SETTINGS: Settings = { instrument: 'concert', lens: 'inside', notes: 'staff', theme: 'stage', mode: 'integrated', nextScale: true, chords: 'text' }
+export const DEFAULT_SETTINGS: Settings = { instrument: 'concert', lens: 'inside', notes: 'staff', theme: 'stage', mode: 'integrated', nextScale: true, chords: 'text', stand: 'chart' }
 
 interface SettingsState extends Settings {
   set: (patch: Partial<Settings>) => void
@@ -33,9 +36,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
   ...DEFAULT_SETTINGS,
   set: (patch) => {
     set(patch)
-    const { instrument, lens, notes, theme, mode, nextScale, chords } = get()
+    const { instrument, lens, notes, theme, mode, nextScale, chords, stand } = get()
     applyTheme(theme)
-    void idbSet('settings', 'prefs', { instrument, lens, notes, theme, mode, nextScale, chords })
+    void idbSet('settings', 'prefs', { instrument, lens, notes, theme, mode, nextScale, chords, stand })
   },
 }))
 

@@ -17,6 +17,7 @@ import { type NextResult, beatsUntil, nextChange } from './next'
 import { type PlayView, playView } from './play'
 import { type SheetBar, buildSheet, topRow } from './sheet'
 import { LoopButton } from './Loop'
+import { StandSwitch } from './Solo'
 import { LiveSyncBadge, PlayIcon } from './Stand'
 import { Staff } from './Staff'
 import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from './view'
@@ -89,6 +90,7 @@ export function LeadSheet({ tl, meta, m, settings }: { tl: Timeline; meta: Track
               )}
             </span>
           </div>
+          <StandSwitch name="lstand" />
           <LoopButton tl={tl} />
           <LiveSyncBadge />
         </header>

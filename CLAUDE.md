@@ -5,9 +5,10 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**M8 built, awaiting the practice week; next M9 · Melody + Solo view.** Map, Coach and polish are built but not yet
-deployed (`pnpm ship`); the M8 exit is a week of real practice on the iPhone. M7's mic timing is parked (D-71). Read
-`handoffs/DECISIONS.md`, then `handoffs/M8-polish.md`; its Next prompt says what to do.
+**M9 built (Melody + Solo view), awaiting the user's tests.** M8 and M9 are not yet deployed (`pnpm ship`); the M8 exit
+is a week of real practice, the M9 exit playing melodies along on alto from the Solo view. Restart `mqc watch` and run
+`pnpm companion requeue-melody` so stored songs get melodies. Read `handoffs/DECISIONS.md`, then
+`handoffs/M9-melody.md`; its Next prompt says what to do.
 
 ## Session protocol (keeps context small)
 
@@ -30,6 +31,7 @@ deployed (`pnpm ship`); the M8 exit is a week of real practice on the iPhone. M7
 - `packages/theory`, `packages/model` — pure TS packages (M2). iReal corpus: `pnpm --filter @mq/theory corpus`
 - `packages/band` — the backing band's arranger, built-in tunes and drills (M6); `apps/web/src/audio` plays it
 - `packages/listen` — live chord decoder, chart alignment, scoring (M7): `pnpm --filter @mq/listen eval --live` on the truth audio
+- `companion/src/mqc/melody.py` — lead melody (M9): htdemucs + CREPE-tiny + Viterbi notes; Solo view in `apps/web/src/ui/stand/Solo.tsx`
 - `companion/` — Windows companion, Python 3.12 + uv (M3): `pnpm companion <cmd>` (`analyse`, `watch`, `queue`, `inbox`, `login`…)
 - Commands: `pnpm dev`, `pnpm test`, `pnpm e2e` (Playwright WebKit), `pnpm lint`, `pnpm typecheck`, `pnpm ship` (deploy), `pnpm tail` (live device logs)
 - `design/sketchbook.html` — approved design source (published as an artifact; URL in 01-design.md)

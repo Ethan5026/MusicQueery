@@ -94,6 +94,17 @@ export const TimelineKey = z.object({
 
 export const TimelineTempo = z.object({ startMs: z.number().min(0), bpm: z.number().positive() })
 
+export const MelodyStem = z.enum(['vocals', 'other'])
+
+/** One note of the lead line (M9): concert MIDI pitch, onset and end snapped to sixteenths of the beat grid. */
+export const MelodyNote = z.object({
+  startMs: z.number().min(0),
+  endMs: z.number().min(0),
+  midi: z.int().min(0).max(127),
+  confidence: z.number().min(0).max(1).optional(),
+  stem: MelodyStem.optional().describe('Separated stem the note was heard in'),
+})
+
 export const TimelineEdit = z.object({
   at: z.iso.datetime(),
   startMs: z.number().min(0),
@@ -120,6 +131,7 @@ export const Timeline = z.object({
   keys: z.array(TimelineKey),
   tempo: z.array(TimelineTempo),
   edits: z.array(TimelineEdit).default([]),
+  melody: z.array(MelodyNote).optional().describe('Lead melody (M9), ascending by startMs'),
 })
 
 export type NoteName = z.infer<typeof NoteName>
@@ -136,6 +148,8 @@ export type TimelineChord = z.infer<typeof TimelineChord>
 export type TimelineKey = z.infer<typeof TimelineKey>
 export type TimelineTempo = z.infer<typeof TimelineTempo>
 export type TimelineEdit = z.infer<typeof TimelineEdit>
+export type MelodyStem = z.infer<typeof MelodyStem>
+export type MelodyNote = z.infer<typeof MelodyNote>
 export type Timeline = z.infer<typeof Timeline>
 
 export function jsonSchemas(): Record<string, unknown> {

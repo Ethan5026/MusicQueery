@@ -304,6 +304,37 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   clipboard where there is none. Not a data backup: fixes and listens are already in the store; prefs, speaker offsets and
   links live only on the phone.
 
+- **D-76** (M9, SP9) Melody from a mix: htdemucs (CPU, no shifts) separates the vocals stem; CREPE-tiny (torchcrepe, 10 ms)
+  tracks its pitch; notes come from a Viterbi over semitones plus silence (Gaussian misfit σ 0.8, change 16, start/stop 5,
+  runs < 50 ms join the note they lead into; a plateau in a sweep on vocadito, both halves agreeing), each note's pitch is
+  the median of its middle 60% (a fall at the end no longer drags it a semitone down), notes < 0.12 s touching a neighbour
+  a semitone away merge into it, and onsets/ends snap to sixteenths of the beat grid. Integer semitones on the track's
+  tuning. The "other" stem is used when the vocals cover < 12% of the track (instrumentals; untested on a real one).
+  Measured on vocadito (40 solo-singing excerpts, CC BY 4.0, two annotators who agree at note F 0.74; onset 50 ms,
+  pitch 50 cents): clean 0.72/0.69; mixed into pop backings at 0 dB and separated again 0.68/0.66, at −6 dB 0.63/0.62;
+  the same mix unseparated 0.55; octave errors ≤ 0.7% of matched notes. Rejected: basic-pitch (needs TensorFlow on
+  Windows; its ONNX model 0.49), pYIN 0.44, FCPE 0.63 (2.5–8% octave-size leaps on songs), full CREPE (no better, 1.7×
+  real time), a key prior from the melody's own scale (0.65 → 0.60: it overrides pitches really sung). On the PC a song
+  costs ~0.5× its length to separate and ~0.1× to transcribe when alone (≤ 1.1× + 0.2× while other work ran), inside
+  the 2× budget. SP9's fallback (contour only) is not needed.
+- **D-77** (M9) Timeline v1 gains an optional `melody[]` ({startMs, endMs, midi concert, confidence, stem}), so v1
+  stays valid. The companion adds it to every new analysis from the stereo capture (`analyse --no-melody` skips it); a
+  failure there only loses the melody. The Worker counts notes in the timeline metadata (`melody`), and the queue takes
+  `redo: true` from the companion only (store secret) to re-capture an analysed track; the watcher honours it.
+  `mqc requeue-melody [--dry-run]` queues every stored analysis without a melody; `mqc melody-saved` adds one from the
+  truth audio kept on the PC (no replay). uv resolves for Windows only (`tool.uv.environments`), as demucs pins
+  numpy < 2 on Intel macOS.
+- **D-78** (M9) Solo view: Settings `stand` = chart | solo, switched beside the chips (portrait) and in the lead
+  sheet's header (sideways). The melody runs on a treble staff in proportion to time (a beat is a fixed width; the
+  playhead at 20%, two bars right of it), each note a head plus a bar as long as it sounds; no engraved rhythms.
+  Written pitch for the instrument, the whole line shifted by one octave choice into the comfortable range (concert
+  60–81, sax written 62–84) and only outliers folded (55–88 / 58–89); spelled in the key at each note (♭2 ♭3 ♯4 ♭6 ♭7
+  off the tonic), every accidental written and naturals within a bar (D-11, no key signature); a rest in each empty
+  beat; names under the notes, skipped where they would collide; notes under 0.5 confidence faint. Chords above in
+  written pitch from what Stand shows (fixes, a linked chart); the melody and its beat grid from the analysed
+  timeline. Below, the Play mode's scale at full width with the melody's notes of the next two bars in brass and any
+  others listed in rust. The roll re-renders once a bar, the scale once a beat; the strip moves by transform (D-44).
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries

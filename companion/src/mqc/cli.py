@@ -32,10 +32,15 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--no-upload", action="store_true")
     s.add_argument("--skip-existing", action="store_true", help="skip tracks already in the store")
     s.add_argument("--first", type=int, default=0, help="for a playlist: only its first N tracks")
+    s.add_argument("--no-melody", action="store_true", help="skip the lead melody (M9)")
 
     sub.add_parser("chart-index", help="build the local Chordonomicon chart index (one time, ~200 MB)")
     s = sub.add_parser("analyse-saved", help="analyse captured truth audio (no replay) and upload")
     s.add_argument("names", nargs="*")
+    s = sub.add_parser("melody-saved", help="add the lead melody to stored timelines from truth audio (M9, no replay)")
+    s.add_argument("names", nargs="*")
+    s = sub.add_parser("requeue-melody", help="queue stored analyses that have no melody for re-capture (M9)")
+    s.add_argument("--dry-run", action="store_true")
     s = sub.add_parser("tap", help="ground truth: play a track and tap its beats/bars")
     s.add_argument("track")
     s.add_argument("--name", required=True, help="short name, e.g. autumn-leaves")
@@ -197,7 +202,7 @@ def cmd_analyse(a) -> int:
             continue
         print(f"[{i}/{len(ids)}] ", end="")
         try:
-            analyse_track(sp, store, tid, a.recogniser or DEFAULT_RECOGNISER)
+            analyse_track(sp, store, tid, a.recogniser or DEFAULT_RECOGNISER, with_melody=not a.no_melody)
         except Exception as e:  # keep going: unattended
             print(f"  FAILED: {e}")
             failed.append(tid)
@@ -294,6 +299,60 @@ def cmd_analyse_saved(a) -> None:
         tl = analyse_audio(rec["trackId"], rec["durationMs"], audio, sr, sp=Spotify())
         res = store.put(tl)
         print(f"  uploaded {res['id']} ({res['bytes']} bytes)")
+
+
+def cmd_melody_saved(a) -> None:
+    import numpy as np
+    import soundfile as sf
+
+    from .analysis import validate_timeline
+    from .pipeline import add_melody
+    from .store import Store
+    from .truth import TRUTH_AUDIO, load, truth_path
+
+    store = Store()
+    names = a.names or sorted(p.stem for p in TRUTH_AUDIO.glob("*.flac"))
+    for name in names:
+        rec = load(name) if truth_path(name).exists() else None
+        tl = store.get(f"spotify:track:{rec['trackId']}") if rec else None
+        if not tl or tl.get("source") != "analysed":
+            print(f"{name}: no stored analysis, skipped")
+            continue
+        audio, sr = sf.read(TRUTH_AUDIO / f"{name}.flac", dtype="float32", always_2d=True)
+        print(f"{rec['title']} — {rec['artist']}")
+        add_melody(tl, audio, sr, np.asarray(tl["beats"], float) / 1000)
+        if "melody" not in tl:
+            continue
+        errs = validate_timeline(tl)
+        if errs:
+            print(f"  invalid: {errs[:3]}")
+            continue
+        res = store.put(tl)
+        print(f"  uploaded {res['id']} ({res['bytes']} bytes)")
+
+
+def cmd_requeue_melody(a) -> None:
+    from .pipeline import OUT_DIR
+    from .store import Store
+
+    store = Store()
+    cands = [
+        t["id"]
+        for t in store.list()
+        if t["id"].startswith("spotify:track:")
+        and (t["meta"] or {}).get("source") == "analysed"
+        and not (t["meta"] or {}).get("melody")
+    ]
+    # timelines stored before the Worker counted melody notes carry no count: look inside
+    todo = [tid for tid in cands if not (store.get(tid) or {}).get("melody")]
+    for tid in todo:
+        local = OUT_DIR / f"{tid.split(':')[-1]}.json"
+        title = json.loads(local.read_text(encoding="utf8")).get("title") if local.exists() else None
+        if a.dry_run:
+            print(f"would queue {tid} {title or ''}")
+        else:
+            print(f"queued {tid} {title or ''}: {store.queue_add(tid, title, redo=True)['state']}")
+    print(f"{len(todo)} stored analyses without a melody" + (" (dry run)" if a.dry_run else ""))
 
 
 def cmd_tap(a) -> None:

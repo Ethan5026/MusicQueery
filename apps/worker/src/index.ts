@@ -55,6 +55,8 @@ export interface QueueItem {
   artist?: string
   state: QueueState
   error?: string
+  /** Analyse again although a timeline is stored (set by the companion only, M9) */
+  redo?: boolean
   requestedAt: string
   updatedAt: string
 }
@@ -171,6 +173,8 @@ export interface TimelineMeta {
   updatedAt: string
   durationMs: number
   chords: number
+  /** Lead-melody notes (M9); absent on timelines stored before it */
+  melody?: number
   bytes: number
 }
 
@@ -274,7 +278,6 @@ export default {
         // The phone has no store secret (D-32): it proves who it is with its Spotify token.
         if (!authorised && !(await spotifyUser(req.headers.get('X-Spotify-Token'), env.ALLOWED_SPOTIFY_USERS)))
           return reply('unauthorised', 401)
-        if ((await env.STORE.get(TIMELINE_PREFIX + id)) !== null) return json({ id, state: 'done' })
         const text = await readBody(req, 4096)
         let body: Record<string, unknown>
         try {
@@ -282,6 +285,9 @@ export default {
         } catch {
           return reply('bad json', 400)
         }
+        // An analysed track is done, unless the companion asks for it again (M9: re-capture for the melody)
+        const redo = authorised && body.redo === true
+        if (!redo && (await env.STORE.get(TIMELINE_PREFIX + id)) !== null) return json({ id, state: 'done' })
         const prev = await current()
         if (!prev && (await env.STORE.list({ prefix: QUEUE_PREFIX })).keys.length >= MAX_QUEUE) return reply('queue full', 429)
         const title = clip(body.title) ?? prev?.title
@@ -292,6 +298,7 @@ export default {
           ...(artist ? { artist } : {}),
           // asking again retries a failed one; a running one carries on
           state: prev?.state === 'working' ? 'working' : 'queued',
+          ...(redo || prev?.redo ? { redo: true } : {}),
           requestedAt: prev?.requestedAt ?? now,
           updatedAt: now,
         }
@@ -491,6 +498,7 @@ export default {
           updatedAt: new Date().toISOString(),
           durationMs: tl.durationMs,
           chords: tl.chords.length,
+          ...(tl.melody ? { melody: tl.melody.length } : {}),
           bytes: text.length,
         }
         await env.STORE.put(key, text, { metadata: meta })
