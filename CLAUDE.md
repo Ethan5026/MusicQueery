@@ -5,10 +5,9 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**M7 follow-up: SP7 offset fix, then M8 · Map, Coach, polish** (or M9 Melody + Solo view; they are independent). M7 is
-built and deployed; on the iPhone the mic heard Let It Be well but stamped chords ~2.5 s late (D-70), which is the first
-job. M6's SP5 audio test and M5b's live inbox check still wait on the user. Read `handoffs/DECISIONS.md`, then
-`handoffs/M7-listen.md`; its Next prompt says what to do.
+**M8 built, awaiting the practice week; next M9 · Melody + Solo view.** Map, Coach and polish are built but not yet
+deployed (`pnpm ship`); the M8 exit is a week of real practice on the iPhone. M7's mic timing is parked (D-71). Read
+`handoffs/DECISIONS.md`, then `handoffs/M8-polish.md`; its Next prompt says what to do.
 
 ## Session protocol (keeps context small)
 

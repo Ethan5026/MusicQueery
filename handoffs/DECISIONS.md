@@ -282,6 +282,28 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   screen kept on while listening. If it comes back: an inaudible 18–20 kHz probe measured at every start, then
   continuously. SP7's "3 tracks ≥ 55%" exit is not met for saved times; recognition itself is (D-70).
 
+- **D-72** (M8) Song map tab. A chart-derived timeline (band, drills, linked chart) gets one row per pass: bars before the form
+  are "Intro", each pass of the repeated chart bars "Chorus n" (a new row where the form restarts), bars after it "Ending";
+  rehearsal letters are ticks above the rows. A recording without passes (P-05) gets rows of 16 bars named by start time.
+  Strips are drawn to the longest row's scale. Each bar takes the key at its middle; colour = circle-of-fifths hue of the
+  concert key, a minor key taking its relative major's hue; N.C. bars are grey. Key areas count bars per key over one chorus
+  (form) or the track, the most held marked home, names in written pitch. Tap a strip to jump to that bar, a row name to its
+  start. The loop card offers the rehearsal section under the playhead (else its 8-bar phrase) through Stand's A–B loop (D-60).
+- **D-73** (M8) Scale coach tab: the next 8 changes from the one sounding (N.C. skipped), each with its scale under the lens
+  (the same setting as Stand's), function in the key, and the 3rd to land on, all written pitch; a tap jumps there; on a live
+  timeline the rows ahead are grey (predicted). The tip comes from the analysis' ii–V(–I)s within those 8 changes, and the
+  guide-tone line is described from its own notes ("A♭ falls a half step to G, then G holds"), because the sketch's fixed
+  sentence ("holds over as the 7th of the I") is wrong when the I is a triad, as in most pop.
+- **D-74** (M8) Polish. Settings → Chord style: maj7 · m7 or Δ7 · –7 (ø7, –Δ7), display only, applied in `ChordSym`, so every
+  screen follows; stored chords stay canonical (D-29). Every tab renders inside an error boundary that logs `ui.crash` and
+  offers Try again / Reload. Map and Coach say why they are empty (nothing open, the playing song has no chords, opening).
+  Stand, Map and Coach share `useShown()` (live ?? linked ?? timeline, plus fixes). Map rows re-render only when the playhead
+  changes row. The sketch's "Look-ahead 4 changes" setting is not built: portrait Stand has no room for more (D-53).
+- **D-75** (M8) Export = Share chords on the Map: the open song as a plain-text lead sheet (four bars a line from `buildSheet`,
+  rehearsal letters, key changes, % for a repeated bar, written pitch and chord style) to the iOS share sheet, or the
+  clipboard where there is none. Not a data backup: fixes and listens are already in the store; prefs, speaker offsets and
+  links live only on the phone.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
@@ -291,5 +313,7 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   *M7: chord-repetition sections (`findSections`, bar self-similarity stripes) scored boundary F@3 s 0.65 on human chords,
   0.43 on the PC's analysis and 0.23 on live chords (4 songs, Isophonics segments), so automatic letters are not shown;
   a linked chart's rehearsal marks are the sections for now (D-68). Decide in M8 (Song map).*
+  *M8: the Song map uses passes and rehearsal marks where a chart provides them, and 16-bar rows named by time otherwise
+  (D-72); automatic sections stay off. Still open, for when the map is used on pop songs.*
 - **P-06** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
   Mas Que Nada's F minor (B♭m7–E♭7 bars). Main key right on 3 of 4 truth tracks. Revisit the emission weights with the truth set.
