@@ -5,8 +5,8 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**M10 built (Lead sheet view, replacing Solo), awaiting the user's visual approval.** M8–M10 are not yet deployed
-(`pnpm ship`). Read `handoffs/DECISIONS.md`, then `handoffs/M10-lead-sheet.md`; its Next prompt says what to do.
+**M10 built (Lead sheet view, replacing Solo), approved on screenshots and deployed 2026-10-18; awaiting use on the phone.** M8–M10 are live
+(version dca3a8a6). Read `handoffs/DECISIONS.md`, then `handoffs/M10-lead-sheet.md`; its Next prompt says what to do.
 
 ## Session protocol (keeps context small)
 

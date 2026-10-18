@@ -1,6 +1,6 @@
 # M10 · Lead sheet view (replaces Solo)
 
-**Status:** awaiting approval (screenshots sent; not deployed: `pnpm ship`) · 2026-10-18 · **Next:** the user's visual verdict, then fixes
+**Status:** approved on screenshots, deployed (Worker version dca3a8a6) · 2026-10-18 · **Next:** the user's visual verdict, then fixes
 **Commit:** see `git log` for "S10|M10:" (pushed to origin/main)
 
 ## Goal of this stage
