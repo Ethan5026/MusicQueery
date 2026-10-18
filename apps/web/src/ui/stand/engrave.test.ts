@@ -2,7 +2,7 @@ import { Timeline } from '@mq/model'
 import { chord, note } from '@mq/theory'
 import { expect, test } from 'vitest'
 import raw from '../../../e2e/fixtures/let-it-be.timeline.json?raw'
-import { bassStack, engrave, fifthsOf, layout, noteValues, rotateTo, sigAccs } from './engrave'
+import { bassStack, engrave, fifthsOf, layout, noteValues, pageRows, rotateTo, sigAccs } from './engrave'
 
 const letItBe = Timeline.parse(JSON.parse(raw))
 
@@ -95,4 +95,20 @@ test('Let It Be: one run a bar over C G, bar repeats spotted, systems fill the w
   expect(systems.length).toBeGreaterThan(10)
   expect(systemOf).toHaveLength(letItBe.bars.length)
   for (const s of systems.slice(0, -1)) expect(s.width).toBeCloseTo(34, 0)
+})
+
+test('page turns: lines keep their slots; one piano line takes the next line’s bars into the room played bars leave', () => {
+  const { systems } = layout(engrave(letItBe, 'alto', 'simple', 'inside'), 34)
+  expect(pageRows(systems, 0, 0, 2).map((r) => [r.sys.index, r.slot])).toEqual([[0, 0], [1, 1]])
+  expect(pageRows(systems, 1, systems[1]!.placed[0]!.m.bar, 2).map((r) => [r.sys.index, r.slot])).toEqual([[1, 1], [2, 0]])
+  const wide = layout(engrave(letItBe, 'concert', 'simple', 'inside'), 90).systems
+  const first = wide[0]!
+  expect(pageRows(wide, 0, first.placed[0]!.m.bar, 1)).toEqual([{ sys: first, slot: 0 }])
+  const last = first.placed[first.placed.length - 1]!
+  const rows = pageRows(wide, 0, last.m.bar, 1)
+  expect(rows).toHaveLength(2)
+  expect(rows[0]!.sys.index).toBe(1)
+  expect(rows[0]!.to).toBeGreaterThan(0)
+  expect(rows[0]!.to).toBeLessThanOrEqual(last.x0)
+  expect(rows[1]!.from).toBe(rows[0]!.to)
 })

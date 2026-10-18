@@ -698,3 +698,38 @@ export function xBeat(p: Placed, x: number): number {
   for (const s of p.slots) if (x < s.x1 || s === p.slots[p.slots.length - 1]) return s.from + Math.max(0, Math.min(1, (x - s.x0) / (s.x1 - s.x0 || 1))) * (s.to - s.from)
   return 0
 }
+
+// ---------------------------------------------------------------- page turns
+
+export interface PageRow {
+  sys: System
+  /** which line of the window it stands on */
+  slot: number
+  /** shown only right of this x (staff spaces): bars already played, covered by the next line */
+  from?: number
+  /** shown only left of this x: the next line's opening bars, in the room the played bars left */
+  to?: number
+}
+
+/** What the window shows, turning pages rather than scrolling. With two or more lines each system keeps its own slot
+ *  (system i on line i mod n): once a line is played the next unseen one takes its place, so nothing moves under the
+ *  eye. With one line, the bars already played are covered by as many whole bars of the next line as fit there. */
+export function pageRows(systems: System[], cur: number, curBar: number, visible: number): PageRow[] {
+  const rows: PageRow[] = []
+  const now = systems[cur]
+  if (!now) return rows
+  if (visible >= 2) {
+    for (let i = cur; i < Math.min(systems.length, cur + visible); i++) rows.push({ sys: systems[i]!, slot: i % visible })
+    return rows
+  }
+  const next = systems[cur + 1]
+  const at = now.placed.find((p) => p.m.bar === curBar)
+  let room = 0
+  if (next && at) for (const p of next.placed) if (p.x1 <= at.x0 + 1e-6) room = p.x1
+  if (room > 0) {
+    rows.push({ sys: next!, slot: 0, to: room })
+    rows.push({ sys: now, slot: 0, from: room })
+  } else rows.push({ sys: now, slot: 0 })
+  return rows
+}
+

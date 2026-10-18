@@ -506,8 +506,8 @@ button.hero-chord:focus-visible { outline: 2px solid var(--steel); outline-offse
 .sc-flagline { font: 600 14px var(--f-ui); color: var(--alert); white-space: nowrap; }
 .sc-flagline.soon { background: var(--alert-soft); padding: 1px 7px; border-radius: 6px; }
 .sc-win { position: relative; overflow: hidden; }
-.sc-col { position: relative; transition: transform .35s ease; }
-.sc-row { position: absolute; right: 0; }
+@keyframes sc-in { from { opacity: 0; } }
+.sc-row { position: absolute; right: 0; animation: sc-in .25s ease-out; }
 .sc-sys { position: relative; cursor: pointer; }
 .sc-sys svg { display: block; }
 .sc-ch { position: absolute; color: var(--ink); white-space: nowrap; font-family: var(--f-chord); font-weight: 700; line-height: 1; display: inline-flex; }

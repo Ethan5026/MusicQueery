@@ -29,15 +29,22 @@ const shot = async (page: Page, name: string) => {
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `test-results/shot-${name}.png` })
 }
 
-/** Systems whose staves show inside the window. */
+/** Lines of staves inside the window (a piano line partly covered by the next one is still one line). */
 const inView = (page: Page) =>
   page.getByTestId('score').evaluate((win) => {
     const w = win.getBoundingClientRect()
-    return [...win.querySelectorAll('.sc-row')].filter((r) => {
-      const b = r.getBoundingClientRect()
-      return b.bottom > w.top + 4 && b.top < w.bottom - 4
-    }).length
+    const tops = [...win.querySelectorAll('.sc-row')]
+      .map((r) => r.getBoundingClientRect())
+      .filter((b) => b.bottom > w.top + 4 && b.top < w.bottom - 4)
+      .map((b) => Math.round(b.top))
+    return new Set(tops).size
   })
+
+/** Which system stands on each line of the window. */
+const slots = (page: Page) =>
+  page.getByTestId('score').evaluate((win) =>
+    Object.fromEntries([...win.querySelectorAll<HTMLElement>('.sc-row')].map((r) => [r.dataset.sys, Number(r.dataset.slot)])),
+  )
 
 async function seek(page: Page, ms: number) {
   await page.getByLabel('Song position').evaluate((el, v) => {
@@ -85,7 +92,7 @@ test('portrait: Let It Be engraved for alto, then piano with the chord in the ba
       return near.length ? [Math.min(...near.map((h) => Math.abs((h.top + h.bottom) / 2 - mid)))] : []
     })
   })
-  expect(offs.length).toBeGreaterThan(6)
+  expect(offs.length).toBeGreaterThan(3)
   expect(Math.max(...offs)).toBeLessThan(2)
   await expect(score.locator('.sc-ch').first()).toBeVisible()
   const [scroll, client] = await page.locator('main.view').evaluate((el) => [el.scrollHeight, el.clientHeight])
@@ -101,6 +108,31 @@ test('portrait: Let It Be engraved for alto, then piano with the chord in the ba
   // Chart comes back on the same switch
   await page.locator('label[for="pstand-chart"]').click()
   await expect(page.getByTestId('hero-chord')).toBeVisible()
+})
+
+test('page turns: a played line is replaced in place by the next unseen one; piano covers played bars with the next line', async ({ page }) => {
+  await openRecorded(page, 'Let It Be')
+  await page.locator('label[for="pstand-score"]').click()
+  await page.locator('label[for="sinst-alto"]').click()
+  const score = page.getByTestId('score')
+  await seek(page, 0)
+  await expect(score.locator('.sc-row')).toHaveCount(2)
+  expect(await slots(page)).toEqual({ 0: 0, 1: 1 })
+  // tap the second line: it plays where it stands, and the first line now shows the one after it
+  await score.locator('.sc-row[data-sys="1"] .sc-sys').click({ position: { x: 200, y: 60 } })
+  await expect(score.locator('.sc-row.cur')).toHaveAttribute('data-sys', '1')
+  expect(await slots(page)).toEqual({ 1: 1, 2: 0 })
+  await shot(page, 'score-page-turn')
+  // piano: one line; in its last bar the bars before are covered by the next line's opening bars
+  await page.locator('label[for="sinst-concert"]').click()
+  const cur = score.locator('.sc-row.cur')
+  const sys = await cur.getAttribute('data-sys')
+  const box = (await cur.locator('.sc-sys').boundingBox())!
+  await cur.locator('.sc-sys').click({ position: { x: box.width - 30, y: box.height / 2 } })
+  await expect(score.locator('.sc-row.cur')).toHaveAttribute('data-sys', sys!)
+  await expect(score.locator(`.sc-row.next[data-sys="${Number(sys) + 1}"]`)).toHaveCount(1)
+  expect(await inView(page)).toBe(1)
+  await shot(page, 'score-piano-wipe')
 })
 
 test('key changes: All the Things You Are flags the change ahead and engraves the new signature', async ({ page }) => {

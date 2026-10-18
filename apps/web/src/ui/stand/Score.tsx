@@ -1,5 +1,6 @@
 // Lead sheet view (M10, replaces M9's Solo): the song engraved on staves from engrave.ts, at most two systems
-// in view (one grand staff for piano), the one playing kept at the top so the next line shows what is coming.
+// in view (one grand staff for piano). Pages turn line by line: a played line is replaced by the next unseen one in place
+// (piano: played bars are covered by the next line's opening bars), so nothing scrolls under the eye.
 // Saxes read one treble staff in written pitch: the scale for the chords. Piano (Concert) reads a grand staff:
 // the scale in the right hand, the chord in the left in note values as long as it sounds. Key signatures,
 // time signatures and changes are engraved where they fall; changes ahead are flagged in rust. A brass playhead
@@ -22,6 +23,7 @@ import {
   beatX,
   engrave,
   isFull,
+  pageRows,
   layout,
   msAtBeat,
   noteValues,
@@ -424,7 +426,7 @@ function useBox<T extends HTMLElement>(): [RefObject<T | null>, { w: number; h: 
   return [ref, box]
 }
 
-/** The engraved window: two systems for sax, one grand staff for piano, the current one at the top. */
+/** The engraved window: two systems for sax, one grand staff for piano, turning pages as lines are played (pageRows). */
 export function ScoreView({ tl, m, settings }: { tl: Timeline; m: Moment; settings: Settings }) {
   const inst = settings.instrument
   const piano = inst === 'concert'
@@ -441,7 +443,9 @@ export function ScoreView({ tl, m, settings }: { tl: Timeline; m: Moment; settin
 
   const curMeasure = m.barIndex >= 0 ? (score.measureOf[m.barIndex] ?? 0) : 0
   const curSys = systemOf[score.measures[curMeasure]?.bar ?? 0] ?? 0
-  const topSys = Math.max(0, Math.min(curSys, systems.length - 1))
+  const curBar = score.measures[curMeasure]?.bar ?? 0
+  const rows = pageRows(systems, curSys, curBar, visible)
+  const curSlot = rows.find((r) => r.sys.index === curSys)?.slot ?? 0
 
   // the playhead: per frame, inside the current system
   const ph = useRef<HTMLElement>(null)
@@ -464,21 +468,25 @@ export function ScoreView({ tl, m, settings }: { tl: Timeline; m: Moment; settin
   }, [tl, systems, curSys, s, marginL, m.positionMs])
 
   const seek = (ms: number) => activeTransport().seek(ms)
-  const from = Math.max(0, topSys - 1)
-  const to = Math.min(systems.length, topSys + visible + 1)
   return (
     <div className="sc-box" ref={box}>
-    <div className="sc-win" style={{ height: visible * sysH }} data-testid="score" data-systems={systems.length} data-s={s.toFixed(2)} data-visible={visible}>
-      {/* a new layout (instrument, mode, width) starts without the scrolling transition */}
-      <div key={`${inst}|${settings.mode}|${settings.lens}|${size.w}|${s}`} className="sc-col" style={{ transform: `translateY(${(-topSys * sysH).toFixed(1)}px)`, height: systems.length * sysH }}>
-        {systems.slice(from, to).map((sys) => (
-          <div key={sys.index} className={`sc-row${sys.index === curSys ? ' cur' : ''}`} style={{ top: sys.index * sysH + sysPad, left: marginL }}>
-            <SystemView tl={tl} sys={sys} piano={piano} s={s} active={sys.index === curSys ? m.eventIndex : -1} onSeek={seek} />
-          </div>
-        ))}
-        <i className="sc-ph" ref={ph} style={{ top: curSys * sysH + sysPad + g.tTop * s - s, height: ((piano ? g.bBot : g.tBot) - g.tTop + 2) * s }} />
+      <div className="sc-win" style={{ height: visible * sysH }} data-testid="score" data-systems={systems.length} data-s={s.toFixed(2)} data-visible={visible}>
+        {rows.map((r) => {
+          const clip = r.to !== undefined ? `inset(-50% calc(100% - ${(r.to * s).toFixed(1)}px) -50% -50%)` : r.from !== undefined ? `inset(-50% -50% -50% ${(r.from * s + marginL).toFixed(1)}px)` : undefined
+          return (
+            <div
+              key={r.sys.index}
+              className={`sc-row${r.sys.index === curSys ? ' cur' : ' next'}`}
+              data-sys={r.sys.index}
+              data-slot={r.slot}
+              style={{ top: r.slot * sysH + sysPad, left: r.to !== undefined ? marginL : 0, paddingLeft: r.to !== undefined ? 0 : marginL, ...(clip ? { clipPath: clip } : {}) }}
+            >
+              <SystemView tl={tl} sys={r.sys} piano={piano} s={s} active={r.sys.index === curSys ? m.eventIndex : -1} onSeek={seek} />
+            </div>
+          )
+        })}
+        <i className="sc-ph" ref={ph} style={{ top: curSlot * sysH + sysPad + g.tTop * s - s, height: ((piano ? g.bBot : g.tBot) - g.tTop + 2) * s }} />
       </div>
-    </div>
     </div>
   )
 }

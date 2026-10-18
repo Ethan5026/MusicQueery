@@ -13,6 +13,7 @@ signatures sit where they fall, every sharp/flat stays on its note, and upcoming
 ## Decisions
 - D-79 Lead sheet view replaces Solo (D-78); melody UI removed, the companion keeps making melodies (P-08)
 - D-80 Engraving rules: runs of one scale, chord stacks, signatures, note values, layout, squeeze, repeats
+- D-82 Page turns: sax lines keep their slots and are replaced in place; piano covers played bars with the next line's opening
 - D-81 After the phone test: 2 lines for sax, 1 for piano, wider spacing; accidentals as paths (iOS drew them a note low)
 
 ## Built
@@ -21,13 +22,13 @@ signatures sit where they fall, every sharp/flat stays on its note, and upcoming
   lines at a width in staff spaces. Also `beatX` / `xBeat`, `noteValues`, `msAtBeat`, `fifthsOf`, `sigAccs`, `bassStack`,
   `trebleBlock` and `rotateTo`
 - `apps/web/src/ui/stand/accidentals.tsx`: ♯ ♭ ♮ 𝄪 𝄫 as SVG paths, centred on their line or space (Score and Staff use it)
-- `apps/web/src/ui/stand/Score.tsx`: `StandSwitch` (Chart | Lead sheet), `ScoreView` (window, playhead, scroll, tap-to-seek),
+- `apps/web/src/ui/stand/Score.tsx`: `StandSwitch` (Chart | Lead sheet), `ScoreView` (window, playhead, page turns, tap-to-seek),
   `SystemView` (SVG staves plus HTML chord symbols), `ScoreCard` (portrait), `ScoreSheet` (sideways, header shows the meter)
 - `engrave.test.ts` (5): signatures, note values, stacks, and a measure walk on a synthetic E♭ → 2/4 → C minor + D7 timeline;
   Let It Be on alto
 - `engrave.stress.test.ts`: all 11 truth timelines (Harte → chord text, bars from the beat grid), the demo, 11 tunes and 7 drills,
   × 3 instruments × 3 modes × widths 34/38/90. Checks the invariants and prints how dense each song gets
-- `e2e/score.e2e.ts` (3): Let It Be alto/piano, ATTYA tenor key change, Human Nature (truth) portrait + sideways. `E2E_SHOTS=1` → `test-results/shot-score-*.png`
+- `e2e/score.e2e.ts` (4, incl. page turns): Let It Be alto/piano, ATTYA tenor key change, Human Nature (truth) portrait + sideways. `E2E_SHOTS=1` → `test-results/shot-score-*.png`
 - Settings `stand`: 'chart' | 'score'. A saved 'solo' loads as 'score'. `app.css`: the Solo block became the M10 block
 - Removed: `Solo.tsx`, `melody.ts`, `melody.test.ts`, `e2e/solo.e2e.ts`, `fixtures/let-it-be-melody.timeline.json` (all in
   git history at 6f8ec7b for the melody page, P-08)

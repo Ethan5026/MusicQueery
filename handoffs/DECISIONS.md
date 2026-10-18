@@ -367,6 +367,12 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   (1–1.4 on most songs), sideways 3–9. Accidentals are drawn as paths (`accidentals.tsx`, also on the Play card's staff):
   Safari on the iPhone drew Noto Music's ♯/♭ half a space low, so they looked like they belonged to the note below.
 
+- **D-82** (M10, user, supersedes D-80's scrolling window) The view turns pages instead of scrolling (`pageRows`). With 2 lines
+  (sax) system i always stands on line i mod 2: when the top line has been played, the line after next replaces it while the bottom
+  one plays, then the bottom is replaced in turn, so nothing moves under the eye. With 1 line (piano), the bars already played are
+  covered by as many whole opening bars of the next line as fit in that room (clip-path, cut at the next line's bar lines), and the
+  next line takes over the whole width when the current one ends. A line that comes in fades over .25 s; the playhead glides between lines.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
