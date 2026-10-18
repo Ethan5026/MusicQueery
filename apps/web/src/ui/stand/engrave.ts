@@ -513,11 +513,11 @@ export const U = {
   sigAcc: 1.05,
   sigPad: 0.9,
   time: 2.6,
-  padL: 1.2,
+  padL: 1.4,
   padR: 0.7,
-  note: 1.75,
+  note: 2.2,
   acc: 0.95,
-  beat: 1.35,
+  beat: 1.6,
   rest: 2.4,
   bassVal: 2.6,
   bassAcc: 1.8,
@@ -557,7 +557,7 @@ export interface System {
 }
 
 /** The tightest a line's notes may be spaced, as a share of their natural room. */
-export const SQUEEZE = 0.8
+export const SQUEEZE = 0.92
 
 const sigW = (fifths: number): number => (fifths ? Math.abs(fifths) * U.sigAcc + U.sigPad : 0.4)
 
@@ -570,7 +570,7 @@ const chordW = (c: MomentChord): number => {
 /** Whether a run writes its whole scale: a fresh scale, or the first run of a line (restated). */
 export const isFull = (m: Measure, r: Run, restate: boolean): boolean => r.fresh || (restate && r === m.runs[0])
 
-const blockW = (b: Block): number => 2.4 + Math.min(2, b.notes.filter((n) => n.glyph).length) * U.acc
+const blockW = (b: Block): number => 3 + Math.min(2, b.notes.filter((n) => n.glyph).length) * U.acc
 
 /** Slot boundaries: where a run or rest starts or ends, and inside a run of stacked chords each chord; with the
  *  room each slot needs for its notes, rests, bass chords and chord symbols. */

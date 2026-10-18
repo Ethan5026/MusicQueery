@@ -70,10 +70,23 @@ test('portrait: Let It Be engraved for alto, then piano with the chord in the ba
   await expect(score).toBeVisible()
   await page.locator('label[for="sinst-alto"]').click()
   await expect(score.locator('.sc-sys').first()).toBeVisible()
-  // no more than three lines in view for sax
-  expect(await inView(page)).toBeLessThanOrEqual(3)
+  // no more than two lines in view for sax
+  expect(await inView(page)).toBeLessThanOrEqual(2)
   // concert C major is written A major: three sharps in the signature, and on the notes too
-  expect(await score.locator('.st-acc').filter({ hasText: '♯' }).count()).toBeGreaterThan(6)
+  expect(await score.locator('.acc-g').count()).toBeGreaterThan(6)
+  // every sharp sits on its own note: centred on the notehead it precedes (not half a space low, as the font drew it on iOS)
+  const offs = await score.evaluate((win) => {
+    const heads = [...win.querySelectorAll('ellipse.nh')].map((e) => e.getBoundingClientRect())
+    return [...win.querySelectorAll('.acc-g:not(.sig)')].flatMap((g) => {
+      if (g.querySelectorAll('path').length !== 2 || g.querySelector('.acc-f')) return [] // sharps and naturals
+      const a = g.getBoundingClientRect()
+      const mid = (a.top + a.bottom) / 2
+      const near = heads.filter((h) => h.left - a.right > -2 && h.left - a.right < 30)
+      return near.length ? [Math.min(...near.map((h) => Math.abs((h.top + h.bottom) / 2 - mid)))] : []
+    })
+  })
+  expect(offs.length).toBeGreaterThan(6)
+  expect(Math.max(...offs)).toBeLessThan(2)
   await expect(score.locator('.sc-ch').first()).toBeVisible()
   const [scroll, client] = await page.locator('main.view').evaluate((el) => [el.scrollHeight, el.clientHeight])
   expect(scroll, `content ${scroll} px in ${client} px`).toBeLessThanOrEqual(client)
@@ -81,7 +94,7 @@ test('portrait: Let It Be engraved for alto, then piano with the chord in the ba
   await page.locator('label[for="sinst-concert"]').click()
   await expect(page.locator('.sc-cap')).toHaveText(/Piano/)
   await expect(score.locator('.sc-brace').first()).toBeVisible()
-  expect(await inView(page)).toBeLessThanOrEqual(2)
+  expect(await inView(page)).toBeLessThanOrEqual(1)
   await shot(page, 'score-piano')
   await page.locator('label[for="smode-advanced"]').click()
   await shot(page, 'score-piano-advanced')

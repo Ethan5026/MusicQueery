@@ -13,12 +13,14 @@ signatures sit where they fall, every sharp/flat stays on its note, and upcoming
 ## Decisions
 - D-79 Lead sheet view replaces Solo (D-78); melody UI removed, the companion keeps making melodies (P-08)
 - D-80 Engraving rules: runs of one scale, chord stacks, signatures, note values, layout, squeeze, repeats
+- D-81 After the phone test: 2 lines for sax, 1 for piano, wider spacing; accidentals as paths (iOS drew them a note low)
 
 ## Built
 - `apps/web/src/ui/stand/engrave.ts`: the pure engraver. `engrave()` turns a timeline + instrument + Play mode + lens into measures
   (meter from the beat grid, key signature, runs, treble blocks, bass stacks with ties, rests, bar repeats). `layout()` breaks
   lines at a width in staff spaces. Also `beatX` / `xBeat`, `noteValues`, `msAtBeat`, `fifthsOf`, `sigAccs`, `bassStack`,
   `trebleBlock` and `rotateTo`
+- `apps/web/src/ui/stand/accidentals.tsx`: ♯ ♭ ♮ 𝄪 𝄫 as SVG paths, centred on their line or space (Score and Staff use it)
 - `apps/web/src/ui/stand/Score.tsx`: `StandSwitch` (Chart | Lead sheet), `ScoreView` (window, playhead, scroll, tap-to-seek),
   `SystemView` (SVG staves plus HTML chord symbols), `ScoreCard` (portrait), `ScoreSheet` (sideways, header shows the meter)
 - `engrave.test.ts` (5): signatures, note values, stacks, and a measure walk on a synthetic E♭ → 2/4 → C minor + D7 timeline;
@@ -32,9 +34,8 @@ signatures sit where they fall, every sharp/flat stays on its note, and upcoming
 
 ## Verified
 - `pnpm test` → 1167 passed · `pnpm lint`, `tsc` clean · `pnpm e2e` → 34 passed (WebKit 402×778 and 874×402)
-- Stress, bars per line for alto, portrait (38 spaces), Integrated: pop 2.4–2.9 (Let It Be 2.7, Don't Stop Me Now 2.4), dense
-  truths 1.2–1.9 (Something 1.2, Human Nature 1.9, Higher Ground 1.2), Coltrane changes 1.0. No line overflows in any song,
-  instrument, mode or width
+- Stress, after D-81, bars per line for alto, portrait (32 spaces), Integrated: 1.0–1.4 on every song (doo-wop 1.9). No line
+  overflows in any song, instrument, mode or width. e2e checks every ♯/♮ is centred on a notehead (< 2 px)
 - Screenshots looked at: Let It Be alto/piano, ATTYA tenor and piano (→ D major flagged, signature changes), Human Nature
   alto portrait and piano sideways (13 bars a line with bar repeats)
 

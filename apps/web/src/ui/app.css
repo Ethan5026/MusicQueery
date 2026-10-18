@@ -531,5 +531,9 @@ button.hero-chord:focus-visible { outline: 2px solid var(--steel); outline-offse
 .scapp { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-height: 0; }
 .scapp .sc-now { font-size: 28px; }
 .scapp .sheet-h { flex-wrap: nowrap; }
-.sc-box { min-height: 0; overflow: hidden; }
+.sc-box { min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
 .sc-slash { stroke: var(--ink-2); stroke-width: 3.2; stroke-linecap: butt; }
+/* accidentals as paths (accidentals.tsx): thin stems, thick slanted bars */
+.acc-g .acc-v, .acc-g .acc-b, .acc-g .acc-f { stroke: var(--ink); fill: none; stroke-linecap: butt; }
+.acc-g .acc-f { stroke-linejoin: round; }
+.acc-g.flag .acc-v, .acc-g.flag .acc-b, .acc-g.flag .acc-f { stroke: var(--alert); }

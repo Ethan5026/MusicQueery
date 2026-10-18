@@ -3,6 +3,7 @@
 // Note colours come from the Play mode (play.ts): brass, steel (guide tones), rust (changed notes).
 import type { Slot } from '@mq/theory'
 import { memo, type ReactNode } from 'react'
+import { Accidental } from './accidentals'
 import type { PlayNote } from './play'
 
 export interface Tone {
@@ -51,7 +52,6 @@ export const Staff = memo(function Staff({ chord, notes, s, g, octave, names }: 
   const rx = s * 0.64
   const ry = s * 0.46
   const acW = s * 1.1
-  const fs = s * 2.4
   const out: ReactNode[] = []
   let k = 0
 
@@ -61,12 +61,7 @@ export const Staff = memo(function Staff({ chord, notes, s, g, octave, names }: 
     for (let q = 40; q <= p; q += 2) ys.push(Y(q))
     return ys.map((y) => <line key={k++} className="st-led" x1={x - r - 3} x2={x + r + 3} y1={y} y2={y} />)
   }
-  const accidental = (x: number, y: number, a: string) =>
-    a ? (
-      <text key={k++} className="st-acc" x={x.toFixed(1)} y={(y - (a.includes('♭') ? s * 0.35 : 0)).toFixed(1)} fontSize={fs}>
-        {dbl(a)}
-      </text>
-    ) : null
+  const accidental = (x: number, y: number, a: string) => (a ? <Accidental key={k++} glyph={dbl(a)} x={x} y={y} s={s} /> : null)
 
   // the chord, stacked
   const clefW = s * 3.3

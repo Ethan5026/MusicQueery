@@ -361,6 +361,12 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
     (instrument, mode, width) does not animate. Staff size is set by the height and by about 38 spaces across. Tapping a
     system seeks to that beat; the brass playhead moves per frame (D-44).
 
+- **D-81** (M10, user, refines D-80's window) After trying it on the phone: at most **2 lines for alto/tenor, 1 grand staff
+  for piano**. Notes are spaced wider so they read uncrowded (note 2.2 spaces, beat 1.6, squeeze no tighter than 92%), the
+  staff space comes from the height up to 11.5 px, and the window is centred in the card. Portrait now fits about 1 bar a line
+  (1–1.4 on most songs), sideways 3–9. Accidentals are drawn as paths (`accidentals.tsx`, also on the Play card's staff):
+  Safari on the iPhone drew Noto Music's ♯/♭ half a space low, so they looked like they belonged to the note below.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries

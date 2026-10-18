@@ -1,5 +1,5 @@
-// Lead sheet view (M10, replaces M9's Solo): the song engraved on staves from engrave.ts, at most three systems
-// in view (two grand staves for piano), the one playing kept at the top so the next lines show what is coming.
+// Lead sheet view (M10, replaces M9's Solo): the song engraved on staves from engrave.ts, at most two systems
+// in view (one grand staff for piano), the one playing kept at the top so the next line shows what is coming.
 // Saxes read one treble staff in written pitch: the scale for the chords. Piano (Concert) reads a grand staff:
 // the scale in the right hand, the chord in the left in note values as long as it sounds. Key signatures,
 // time signatures and changes are engraved where they fall; changes ahead are flagged in rust. A brass playhead
@@ -28,6 +28,7 @@ import {
   sigAccs,
   xBeat,
 } from './engrave'
+import { Accidental } from './accidentals'
 import { InstrumentSeg } from './InstrumentSeg'
 import { frameBus } from './live'
 import { LoopButton } from './Loop'
@@ -85,7 +86,6 @@ function geom(piano: boolean) {
   return { lbl, chord, tTop, tBot, bTop, bBot, h }
 }
 
-const ACC_DY: Record<string, number> = { '♭': -0.35, '𝄫': -0.35 }
 const REST: Record<number, string> = { 1: '𝄻', 0.5: '𝄼', 0.25: '𝄽', 0.125: '𝄾', 0.0625: '𝄿' }
 
 interface SysProps {
@@ -112,7 +112,6 @@ const SystemView = memo(function SystemView({ tl, sys, piano, s, active, onSeek 
   const bot = (piano ? g.bBot : g.tBot) * s
   const rx = s * 0.62
   const ry = s * 0.45
-  const fs = s * 2.3
 
   const staffLines = (y0: number) =>
     [0, 1, 2, 3, 4].map((i) => <line key={k++} className="st-line" x1={0} x2={W} y1={y0 + i * s} y2={y0 + i * s} />)
@@ -153,19 +152,15 @@ const SystemView = memo(function SystemView({ tl, sys, piano, s, active, onSeek 
     for (let q = hi; q <= p; q += 2) ls.push(<line key={k++} className="st-led" x1={x - r - s * 0.35} x2={x + r + s * 0.35} y1={y(q)} y2={y(q)} />)
     return ls
   }
-  const accGlyph = (x: number, y: number, a: string, cls = '') =>
-    a ? (
-      <text key={k++} className={`st-acc${cls}`} x={x} y={y + (ACC_DY[a] ?? 0) * s} fontSize={fs}>
-        {a}
-      </text>
-    ) : null
+  const accGlyph = (x: number, y: number, a: string, cls = '', sig = false) =>
+    a ? <Accidental key={k++} glyph={a} x={x} y={y} s={s} flag={cls.includes('flag')} sig={sig} /> : null
 
   /** Key signature (and naturals cancelling the old one) from x; returns the x after it. */
   const keySig = (x0: number, fifths: number, prev: number | null, cls: string): number => {
     let x = x0
     const both = (pos: number, glyph: string) => {
-      out.push(accGlyph(x + s * 0.9, yT(pos), glyph, cls))
-      if (piano) out.push(accGlyph(x + s * 0.9, yB(pos - 14), glyph, cls))
+      out.push(accGlyph(x + s * 0.9, yT(pos), glyph, cls, true))
+      if (piano) out.push(accGlyph(x + s * 0.9, yB(pos - 14), glyph, cls, true))
       x += U.sigAcc * s
     }
     if (prev !== null) {
@@ -429,19 +424,19 @@ function useBox<T extends HTMLElement>(): [RefObject<T | null>, { w: number; h: 
   return [ref, box]
 }
 
-/** The engraved window: three systems (two grand staves for piano), the current one at the top. */
+/** The engraved window: two systems for sax, one grand staff for piano, the current one at the top. */
 export function ScoreView({ tl, m, settings }: { tl: Timeline; m: Moment; settings: Settings }) {
   const inst = settings.instrument
   const piano = inst === 'concert'
-  const visible = piano ? 2 : 3
+  const visible = piano ? 1 : 2
   const score = useMemo(() => engrave(tl, inst, settings.mode, settings.lens), [tl, inst, settings.mode, settings.lens])
   const [box, size] = useBox<HTMLDivElement>()
   const g = geom(piano)
-  // staff size from the height, no bigger than lets about two bars sit on a line; spare height goes between systems
-  const s = Math.max(6.5, Math.min(piano ? 10.5 : 11.5, size.h / (visible * g.h), size.w / 38))
+  // staff size from the height, capped so a line still holds a bar or two; spare height goes between systems
+  const s = Math.max(6.5, Math.min(11.5, size.h / (visible * g.h)))
   const marginL = piano ? s * 1.6 : s * 0.3
   const { systems, systemOf } = useMemo(() => layout(score, (size.w - marginL - 4) / s), [score, size.w, s, marginL])
-  const sysH = Math.max(g.h * s, Math.min(g.h * s * 1.2, Math.floor(size.h / visible)))
+  const sysH = Math.max(g.h * s, Math.min(g.h * s * 1.5, Math.floor(size.h / visible)))
   const sysPad = (sysH - g.h * s) / 2
 
   const curMeasure = m.barIndex >= 0 ? (score.measureOf[m.barIndex] ?? 0) : 0

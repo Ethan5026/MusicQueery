@@ -30,8 +30,8 @@ function corpus(): Array<[string, Timeline]> {
 }
 
 const MODES: PlayMode[] = ['simple', 'integrated', 'advanced']
-/** staff spaces across: portrait sax and piano at s ≈ 9.5–11, landscape ≈ 9 */
-const WIDTHS = [38, 34, 90]
+/** staff spaces across: portrait at s ≈ 11.5 (32), landscape (73) */
+const WIDTHS = [32, 34, 73]
 
 test('every song, instrument, mode and width engraves with sound geometry', () => {
   const rows: string[] = []
@@ -63,7 +63,7 @@ test('every song, instrument, mode and width engraves with sound geometry', () =
             if (s.width > w + 0.5) overflow++
             for (const p of s.placed) for (const sl of p.slots) if (sl.x1 > s.width + 0.5) overflow++
           }
-          if (inst === 'alto' && mode === 'integrated' && w === 38) systems = ss.length
+          if (inst === 'alto' && mode === 'integrated' && w === 32) systems = ss.length
         }
         if (inst === 'concert' && mode === 'simple') changes = sc.measures.reduce((n, m) => n + m.chords.filter((c) => !c.held).length, 0)
       }
