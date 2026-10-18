@@ -22,7 +22,7 @@ import { Confidence, ListenButton, ListenChip, ListeningWait } from './Listen'
 import { LoopBand, LoopButton } from './Loop'
 import { frameBus, useLandscape, useMoment, useShown, useStandUi, useSync } from './live'
 import { type PlayView, playView } from './play'
-import { SoloCard, SoloSheet, StandSwitch } from './Solo'
+import { ScoreCard, ScoreSheet, StandSwitch } from './Score'
 import { Staff } from './Staff'
 import { barIndexAt, barPosition, homeKey, keyText, sectionLabel, tempoAt } from './view'
 
@@ -39,8 +39,8 @@ export function Stand() {
   let body
   if (shown && meta && m)
     body = land ? (
-      settings.stand === 'solo' ? (
-        <SoloSheet shown={shown} meta={meta} m={m} settings={settings} />
+      settings.stand === 'score' ? (
+        <ScoreSheet tl={shown} meta={meta} m={m} settings={settings} />
       ) : (
         <LeadSheet tl={shown} meta={meta} m={m} settings={settings} />
       )
@@ -291,7 +291,7 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
   const view = playView(m, settings.mode)
 
   return (
-    <div className="stand">
+    <div className={`stand${settings.stand === 'score' ? ' stand-fill' : ''}`}>
       <NowPlaying meta={meta} />
       <Progress tl={tl} durationMs={tl.durationMs} positionMs={m.positionMs} />
 
@@ -329,8 +329,8 @@ function StandView({ tl, meta, m, settings }: { tl: Timeline; meta: TrackMeta; m
       <StandSwitch name="pstand" />
       </div>
 
-      {settings.stand === 'solo' ? (
-        <SoloCard shown={tl} meta={meta} m={m} settings={settings} />
+      {settings.stand === 'score' ? (
+        <ScoreCard tl={tl} m={m} settings={settings} />
       ) : (
         <>
       <section className="card hero" aria-label="Current chord">

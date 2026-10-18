@@ -9,8 +9,8 @@ import { idbGet, idbSet } from './idb'
 export type NotesView = 'staff' | 'keys'
 /** Stage = dark (default, for gigs), Paper = light, Auto follows the phone. */
 export type Theme = 'stage' | 'paper' | 'auto'
-/** Stand shows the chart, or the lead melody on a big staff (M9) */
-export type StandView = 'chart' | 'solo'
+/** Stand shows the chart, or the song engraved as a lead sheet on staves (M10, replaced M9's 'solo') */
+export type StandView = 'chart' | 'score'
 
 export interface Settings {
   instrument: InstrumentId
@@ -45,6 +45,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 export async function loadSettings(): Promise<void> {
   const saved = await idbGet<Partial<Settings>>('settings', 'prefs')
   const s = { ...DEFAULT_SETTINGS, ...saved }
+  if ((s.stand as string) === 'solo') s.stand = 'score'
   useSettings.setState(s)
   applyTheme(s.theme)
 }

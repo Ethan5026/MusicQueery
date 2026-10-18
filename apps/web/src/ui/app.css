@@ -488,36 +488,48 @@ button.hero-chord:focus-visible { outline: 2px solid var(--steel); outline-offse
 .crow.pred .ch, .crow.pred .scn { color: var(--ink-2); }
 .map-t { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
-/* ---------- Solo view (M9): the lead melody on a big staff, the scale below ----------
-   The roll moves under a fixed brass playhead; a note is a head plus a bar as long as it sounds. */
+/* ---------- Lead sheet view (M10, replaced M9's Solo): the song engraved on staves ----------
+   Three systems in view (two grand staves for piano), the playing one at the top; changes ahead in rust. */
 .chips-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .chips-row .chips { flex: 1; min-width: 0; }
 .chips-row .mini-seg { flex: none; }
-.sl-card { padding: 10px 12px 6px; display: grid; gap: 4px; }
-.sl-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.sl-top .inst-seg { margin-left: auto; }
-.sl-now { font-size: 40px; }
-.sl-next { display: inline-flex; align-items: baseline; gap: 6px; color: var(--ink-2); font-size: 13px; }
-.sl-next .ch { font-size: 22px; color: var(--ink-2); }
-.sl { position: relative; overflow: hidden; }
-.sl-staff { position: absolute; inset: 0 auto auto 0; }
-.sl-roll { position: absolute; top: 0; bottom: 0; overflow: hidden; }
-.sl-strip { position: absolute; top: 0; left: 0; will-change: transform; }
-.sl-svg { display: block; }
-.sl-ch { position: absolute; top: 2px; font-size: 21px; color: var(--ink); }
-.sl-ph { position: absolute; width: 2px; margin-left: -1px; background: var(--brass); border-radius: 1px; box-shadow: 0 0 0 3px var(--brass-soft); }
-.nh.sl { fill: var(--ink); }
-.sl-dur { fill: var(--brass-soft); }
-.st-nm.sl { fill: var(--ink); }
-.faint { opacity: .42; }
-.sl-rest { fill: var(--ink-2); font-family: var(--f-acc); text-anchor: middle; dominant-baseline: central; }
-.sl-scale { display: grid; gap: 4px; }
-.sl-wide svg { width: 100%; height: auto; }
-.sl-extra { font: 700 15px var(--f-label); color: var(--alert); }
-.sl-none { margin: 6px 0; }
-.sapp { height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 6px; min-height: 0; }
-.sapp .sheet-h .sl-top { flex: none; }
-.sapp .sl-now { font-size: 30px; }
-.sapp .sl-scale { min-height: 0; overflow: hidden; grid-template-rows: auto minmax(0, 1fr); }
-.sapp .sl-wide { min-height: 0; display: flex; justify-content: center; }
-.sapp .sl-wide svg { width: auto; height: 100%; max-width: 100%; }
+.stand.stand-fill { height: 100%; }
+.stand-fill .sc-card { flex: 1 1 0; min-height: 0; }
+.sc-card { padding: 8px 10px 4px; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 4px; min-height: 0; }
+.sc-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sc-ctl { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sc-cap { font: 600 10.5px var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.sc-nn { display: inline-flex; align-items: baseline; gap: 12px; min-width: 0; }
+.sc-now { font-size: 38px; }
+.sc-next { display: inline-flex; align-items: baseline; gap: 5px; color: var(--ink-2); font-size: 13px; }
+.sc-next .ch { font-size: 22px; color: var(--ink-2); }
+.sc-flagline { font: 600 14px var(--f-ui); color: var(--alert); white-space: nowrap; }
+.sc-flagline.soon { background: var(--alert-soft); padding: 1px 7px; border-radius: 6px; }
+.sc-win { position: relative; overflow: hidden; }
+.sc-col { position: relative; transition: transform .35s ease; }
+.sc-row { position: absolute; right: 0; }
+.sc-sys { position: relative; cursor: pointer; }
+.sc-sys svg { display: block; }
+.sc-ch { position: absolute; color: var(--ink); white-space: nowrap; font-family: var(--f-chord); font-weight: 700; line-height: 1; display: inline-flex; }
+.sc-ch .ch { font-size: 1em; }
+.sc-ch.on { color: var(--brass); }
+.sc-ch.held { color: var(--ink-2); }
+.sc-reh { position: absolute; font: 700 1em/1.1 var(--f-label); border: 1.5px solid var(--ink); border-radius: 3px; padding: 0 .3em; }
+.sc-key { position: absolute; font: 600 1em/1.3 var(--f-ui); color: var(--ink-2); white-space: nowrap; }
+.sc-key.flag { color: var(--alert); }
+.sc-num { position: absolute; font: 500 1em var(--f-mono); color: var(--ink-2); }
+.sc-time { fill: var(--ink); font: 800 1em var(--f-ui); text-anchor: middle; dominant-baseline: central; }
+.sc-time.flag { fill: var(--alert); }
+.sc-time.faint { fill: var(--ink-2); opacity: .55; }
+.st-acc.flag { fill: var(--alert); }
+.sc-rest, .sc-rep { fill: var(--ink); font-family: var(--f-acc); text-anchor: middle; dominant-baseline: central; }
+.sc-open { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+.sc-stem { stroke: var(--ink); stroke-width: 1.2; }
+.sc-flag, .sc-tie { fill: none; stroke: var(--ink); stroke-width: 1.3; stroke-linecap: round; }
+.sc-brace { fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; }
+.sc-ph { position: absolute; left: 0; width: 2px; margin-left: -1px; background: var(--brass); border-radius: 1px; box-shadow: 0 0 0 3px var(--brass-soft); pointer-events: none; transition: top .35s ease; }
+.scapp { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-height: 0; }
+.scapp .sc-now { font-size: 28px; }
+.scapp .sheet-h { flex-wrap: nowrap; }
+.sc-box { min-height: 0; overflow: hidden; }
+.sc-slash { stroke: var(--ink-2); stroke-width: 3.2; stroke-linecap: butt; }

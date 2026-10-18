@@ -335,6 +335,32 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   timeline. Below, the Play mode's scale at full width with the melody's notes of the next two bars in brass and any
   others listed in rust. The roll re-renders once a bar, the scale once a beat; the strip moves by transform (D-44).
 
+- **D-79** (M10, user, supersedes D-78) The Solo view is replaced by the **Lead sheet** view (Settings `stand` = chart | score, the
+  switch reads Chart | Lead sheet; a saved 'solo' loads as 'score'). The melody is no longer on any screen. The companion still
+  transcribes it into `melody[]` (D-76, D-77) for a later page of its own (P-08). The M9 UI is in git history at 6f8ec7b.
+- **D-80** (M10, user; refines D-11 for this view) Engraving rules (`engrave.ts`), so nothing is invented:
+  - **Bars and meter.** Bars come from the timeline. A bar's meter is its beat count on the grid; a short first bar is a pickup
+    and a short last bar is ignored. A time signature appears on the first bar and wherever the count changes (rust).
+  - **Key signature.** It comes from the key at the bar line (a change inside a bar is signed from the next bar), in written
+    pitch; a minor key takes its relative major's signature, and above 7 accidentals the enharmonic is used. It is drawn at
+    every line start. A change of key gets a rust label; a change of signature also gets a double bar, cancelling naturals and
+    the new signature in rust. Every ♯/♭ is still written on its note; ♮ appears where the signature or an earlier note in
+    the bar would alter it.
+  - **Treble.** Consecutive chords whose Play-mode scales (play.ts, per mode and lens, written pitch) share a pitch set form one
+    run. A run writes the whole scale, turned to start on its first chord's root (D4–C5), spread over its beats, when the scale
+    is new or a line starts with it. Otherwise each chord starting in it is stacked (root position, tensions above). A chord
+    carried on gets one rhythm slash a beat. Colours: brass chord tone, steel 3rd/7th, rust = a note Integrated swapped in.
+  - **Piano.** Concert gets a grand staff. The bass clef stacks every chord in root position with a slash bass below it, in the
+    octave with the fewest ledgers. Note values follow the chord's length (half-beat rounding, dotted where exact, tied
+    within and over bar lines). N.C. and gaps get rests (a whole-bar rest is a whole rest).
+  - **Repeats.** A bar identical to the one before (same beats, chords, notes) is drawn as 𝄎, never at a line start.
+  - **Layout.** Width is in staff spaces. A slot is cut at every run, rest and chord, and each slot needs room for its notes,
+    bass values and chord symbol. A line takes another bar while it fits at 80% squeeze. Lines are justified by beats; the
+    last line is not stretched; a bar wider than a line is squeezed.
+  - **Window.** 3 systems for sax, 2 for piano. The playing system sits at the top and scrolls .35 s per line; a new layout
+    (instrument, mode, width) does not animate. Staff size is set by the height and by about 38 spaces across. Tapping a
+    system seeks to that beat; the brass playhead moves per frame (D-44).
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
@@ -348,3 +374,6 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   (D-72); automatic sections stay off. Still open, for when the map is used on pop songs.*
 - **P-06** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
   Mas Que Nada's F minor (B♭m7–E♭7 bars). Main key right on 3 of 4 truth tracks. Revisit the emission weights with the truth set.
+- **P-08** (M10, user) Loose end: the melody as its own page, analysed from a recording the PC captures (WASAPI loopback or an
+  API source), never the phone's mic. The data already exists (D-76, D-77: `melody[]`, `requeue-melody`, `melody-saved`). Off
+  every screen until that page is designed.
