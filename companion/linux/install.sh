@@ -16,6 +16,16 @@ for c in gcc g++ pkg-config pw-record; do
 done
 pkg-config --exists libpulse || { echo "Missing libpulse-dev: sudo apt-get install -y libpulse-dev"; exit 1; }
 
+echo "== Node for the theory bridge (fnm alias 'musicqueery' = .node-version, used by mqc-watch.service)"
+FNM="$HOME/.local/share/fnm/fnm"
+[ -x "$FNM" ] || { echo "Missing fnm: curl -fsSL https://fnm.vercel.app/install | bash"; exit 1; }
+NODE_V="$(cat .node-version)"
+"$FNM" install "$NODE_V"
+"$FNM" alias "$NODE_V" musicqueery
+NODE_BIN="$HOME/.local/share/fnm/aliases/musicqueery/bin"
+[ -x "$NODE_BIN/pnpm" ] || PATH="$NODE_BIN:$PATH" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 "$NODE_BIN/corepack" enable
+PATH="$NODE_BIN:$PATH" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 "$NODE_BIN/pnpm" install --frozen-lockfile
+
 echo "== uv + Python 3.12"
 [ -x "$UV" ] || curl -LsSf https://astral.sh/uv/install.sh | sh
 "$UV" python install 3.12
