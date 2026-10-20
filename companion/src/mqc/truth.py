@@ -18,7 +18,7 @@ Timeline v1 (`source: exact`) in companion/truth/<name>.timeline.json.
 from __future__ import annotations
 
 import json
-import msvcrt
+import sys
 import threading
 import time
 from pathlib import Path
@@ -42,23 +42,43 @@ def audio_path(name: str) -> Path:
     return TRUTH_AUDIO / f"{name}.flac"
 
 
+def _key_poller():
+    """A function returning the next key press or None, without waiting: msvcrt on Windows, a cbreak tty elsewhere."""
+    if sys.platform == "win32":
+        import msvcrt
+
+        return lambda: msvcrt.getwch() if msvcrt.kbhit() else None
+    import select
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+    import atexit
+
+    atexit.register(termios.tcsetattr, fd, termios.TCSADRAIN, old)
+    return lambda: sys.stdin.read(1) if select.select([sys.stdin], [], [], 0)[0] else None
+
+
 def tap(sp: Spotify, track_id: str, name: str, device_name: str = "", keys: bool = True) -> dict:
     """Plays and captures the track while recording taps. Returns the saved truth record."""
     taps: list[tuple[int, str]] = []
     stop = threading.Event()
 
     def read_keys() -> None:
+        poll = _key_poller()
         while not stop.is_set():
-            if msvcrt.kbhit():
-                ch = msvcrt.getwch()
-                t = time.perf_counter_ns()
-                if ch in ("\r", "\n"):
-                    taps.append((t, "bar"))
-                elif ch == " ":
-                    taps.append((t, "beat"))
-                print("|" if ch in "\r\n" else ".", end="", flush=True)
-            else:
+            ch = poll()
+            if ch is None:
                 time.sleep(0.001)
+                continue
+            t = time.perf_counter_ns()
+            if ch in ("\r", "\n"):
+                taps.append((t, "bar"))
+            elif ch == " ":
+                taps.append((t, "beat"))
+            print("|" if ch in "\r\n" else ".", end="", flush=True)
 
     meta = sp.track(track_id)
     print(f"{meta['name']} — {', '.join(a['name'] for a in meta['artists'])} ({meta['duration_ms'] / 60000:.1f} min)")
