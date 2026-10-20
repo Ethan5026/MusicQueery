@@ -1,15 +1,19 @@
-"""Per-process capture of Spotify.exe (SP3) and alignment of the capture to track position.
+"""Capture of the Spotify player (SP3) and alignment of the capture to track position.
 
-The helper (capture/bin/mqcapture.exe) writes a WAV whose frame index is linear in QPC time. While it runs we
-sample /me/player; each sample says "at perf_counter t the track was at progress p". With the WAV's first-packet
-QPC time that gives offset = capture_ms(t) - p, constant while playback is continuous. The median offset maps
-capture frames to track milliseconds.
+Windows: the helper (capture/bin/mqcapture.exe) records the Spotify.exe process tree by WASAPI loopback and writes a
+WAV whose frame index is linear in QPC time (D-33). Linux: librespot plays into a silent PipeWire sink and
+`pw-record` reads that sink's monitor; frame 0's monotonic time is the lower envelope of chunk arrival times.
+Either way the recorder knows frame 0's time on the `time.perf_counter_ns()` clock (QPC on Windows, CLOCK_MONOTONIC
+on Linux). While it runs we sample /me/player; each sample says "at perf_counter t the track was at progress p".
+That gives offset = capture_ms(t) - p, constant while playback is continuous. The median offset maps capture frames
+to track milliseconds.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import statistics
 import subprocess
 import threading
@@ -21,7 +25,7 @@ import numpy as np
 import psutil
 import soundfile as sf
 
-from .config import CAPTURE_EXE
+from .config import CAPTURE_EXE, CAPTURE_SINK, LINUX_DEVICE_NAME, WINDOWS, Settings
 from .spotify import PlayerState, Spotify, SpotifyError
 
 
@@ -38,8 +42,8 @@ def spotify_root_pid() -> int:
     return min(roots, key=lambda pid: procs[pid].create_time())
 
 
-class Recorder:
-    """Runs mqcapture.exe for one process tree until stop()."""
+class WasapiRecorder:
+    """Windows: runs mqcapture.exe for one process tree until stop()."""
 
     def __init__(self, pid: int, wav: Path) -> None:
         if not CAPTURE_EXE.exists():
@@ -83,6 +87,102 @@ class Recorder:
             raise CaptureError(f"capture ended badly: {self.events[-3:]}")
         return stopped[-1]
 
+    def first_frame_ns(self) -> int:
+        return _first_packet_qpc_ns(self.wav)
+
+
+class PipeWireRecorder:
+    """Linux: records the monitor of the silent sink librespot plays into (`pw-record`, raw s16 stereo on stdout)
+    until stop(). Each chunk is stamped with perf_counter_ns() when it arrives; a frame can only arrive after it was
+    played, so frame 0's time is the lower envelope min(arrival - frames_so_far / rate). The sink runs on PipeWire's
+    dummy driver, which is timed by CLOCK_MONOTONIC, so the frame index stays linear in that clock (SP3 check on the
+    mini PC: 4 ms over 17 s, chunk lag 5 ms median, 12 ms max)."""
+
+    RATE = 44100
+    CHANNELS = 2
+
+    def __init__(self, wav: Path, sink: str = CAPTURE_SINK) -> None:
+        if not shutil.which("pw-record"):
+            raise CaptureError("pw-record missing: install pipewire-bin")
+        self.wav = wav
+        self.events: list[dict] = []
+        self.peak = 0.0
+        self.frames = 0
+        self._t0_ns: float | None = None
+        self._out = sf.SoundFile(wav, "w", samplerate=self.RATE, channels=self.CHANNELS, subtype="PCM_16")
+        self.proc = subprocess.Popen(
+            [
+                "pw-record",
+                "--target",
+                sink,
+                "-P",
+                "{ stream.capture.sink = true, node.name = mqc_recorder }",
+                "--rate",
+                str(self.RATE),
+                "--channels",
+                str(self.CHANNELS),
+                "--format",
+                "s16",
+                "--latency",
+                "20ms",
+                "--raw",
+                "-",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self._started = threading.Event()
+        self._reader = threading.Thread(target=self._read, daemon=True)
+        self._reader.start()
+        if not self._started.wait(5):
+            self.proc.kill()
+            err = self.proc.stderr.read().decode(errors="replace").strip() if self.proc.stderr else ""
+            self._out.close()
+            raise CaptureError(f"pw-record gave no audio from sink {sink!r} within 5 s {err}".strip())
+        self.events.append({"event": "started", "sink": sink})
+
+    def _read(self) -> None:
+        assert self.proc.stdout
+        frame_bytes = 2 * self.CHANNELS
+        rest = b""
+        while chunk := self.proc.stdout.read1(65536):
+            t = time.perf_counter_ns()
+            chunk = rest + chunk
+            n = len(chunk) // frame_bytes
+            rest = chunk[n * frame_bytes :]
+            if not n:
+                continue
+            pcm = np.frombuffer(chunk[: n * frame_bytes], dtype="<i2").reshape(n, self.CHANNELS)
+            self._out.write(pcm)
+            self.frames += n
+            t0 = t - self.frames * 1e9 / self.RATE
+            self._t0_ns = t0 if self._t0_ns is None else min(self._t0_ns, t0)
+            self.peak = max(self.peak, float(np.abs(pcm).max()) / 32768)
+            self._started.set()
+
+    def stop(self) -> dict:
+        if self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+        self._reader.join(5)
+        self._out.close()
+        if not self.frames:
+            raise CaptureError("capture ended with no audio")
+        ev = {"event": "stopped", "frames": self.frames}
+        self.events.append(ev)
+        return ev
+
+    def first_frame_ns(self) -> int:
+        assert self._t0_ns is not None
+        return int(self._t0_ns)
+
+
+def open_recorder(wav: Path) -> WasapiRecorder | PipeWireRecorder:
+    return WasapiRecorder(spotify_root_pid(), wav) if WINDOWS else PipeWireRecorder(wav)
+
 
 @dataclass
 class Capture:
@@ -94,6 +194,7 @@ class Capture:
     rate: int
     offset_ms: float  # capture time (ms from the WAV's first frame) at track position 0
     offset_spread_ms: float  # median absolute deviation of the per-sample offsets
+    first_frame_ns: int = 0  # perf_counter_ns() time of the WAV's first frame (taps in `mqc tap` use the same clock)
     samples: list[PlayerState] = field(default_factory=list)
     peak: float = 0.0
     first_sound_ms: float | None = None  # first non-silent capture time, for the SP3 alignment check
@@ -128,8 +229,14 @@ def _first_sound_ms(wav: Path, rate: int, threshold: float = 10 ** (-60 / 20)) -
     return float(loud[0] * 1000 / rate) if len(loud) else None
 
 
+def default_device_name() -> str:
+    """The Spotify Connect device that plays for capture: the config's `device_name`, else this PC's Spotify app
+    (named after the computer) on Windows, else librespot on Linux."""
+    return Settings.load().device_name or (os.environ.get("COMPUTERNAME", "") if WINDOWS else LINUX_DEVICE_NAME)
+
+
 def find_pc_device(sp: Spotify, name: str = "") -> dict:
-    want = (name or os.environ.get("COMPUTERNAME", "")).lower()
+    want = (name or default_device_name()).lower()
     devs = sp.devices()
     for d in devs:
         if d["type"] == "Computer" and (not want or d["name"].lower() == want):
@@ -191,7 +298,7 @@ def _capture_track(
 
     sp.pause(device["id"]) if device.get("is_active") else None
     time.sleep(0.5)
-    rec = Recorder(spotify_root_pid(), wav)
+    rec = open_recorder(wav)
     if rec.events[-1].get("event") == "error":
         raise CaptureError(str(rec.events[-1]))
     try:
@@ -233,8 +340,8 @@ def _capture_track(
 
     if len(samples) < 5:
         raise CaptureError(f"only {len(samples)} player samples")
-    qpc0 = _first_packet_qpc_ns(wav)
-    offsets = [(s.t_ns - qpc0) / 1e6 - s.progress_ms for s in samples]
+    t0_ns = rec.first_frame_ns()
+    offsets = [(s.t_ns - t0_ns) / 1e6 - s.progress_ms for s in samples]
     med = statistics.median(offsets)
     mad = statistics.median(abs(o - med) for o in offsets)
     jumps = [o for o in offsets if abs(o - med) > 400]
@@ -248,6 +355,7 @@ def _capture_track(
         rate=info.samplerate,
         offset_ms=med,
         offset_spread_ms=mad,
+        first_frame_ns=t0_ns,
         samples=samples,
         peak=rec.peak,
     )

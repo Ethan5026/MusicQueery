@@ -36,9 +36,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/mqc"]
 
-# The companion runs on Windows only (WASAPI capture, D-33); demucs pins numpy<2 on Intel macOS.
+# The companion runs on Windows (WASAPI capture, D-33) and Linux x86-64 (librespot + PipeWire, the mini PC);
+# not macOS: demucs pins numpy<2 on Intel macOS.
 [tool.uv]
-environments = ["sys_platform == 'win32'"]
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux' and platform_machine == 'x86_64'"]
 
 # CPU torch keeps the install small; analysis of one track takes seconds either way.
 [[tool.uv.index]]
@@ -50,11 +51,20 @@ explicit = true
 torch = { index = "pytorch-cpu" }
 # madmom 0.16.1 on PyPI does not build on 3.12
 madmom = { git = "https://github.com/CPJKU/madmom" }
-# Built by scripts/build_chordino.py (the PyPI sdist does not compile with MSVC).
-vamp = { path = ".wheels/vamp-1.1.0-cp312-cp312-win_amd64.whl" }
+# Windows: built by scripts/build_chordino.py (the PyPI sdist does not compile with MSVC). Linux: the PyPI sdist.
+vamp = [
+  { path = ".wheels/vamp-1.1.0-cp312-cp312-win_amd64.whl", marker = "sys_platform == 'win32'" },
+  { index = "pypi", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+explicit = true
 
 [tool.uv.extra-build-dependencies]
 madmom = ["numpy", "cython"]
+vamp = ["numpy"]  # the sdist imports numpy in setup.py without declaring it
 
 [tool.ruff]
 line-length = 120

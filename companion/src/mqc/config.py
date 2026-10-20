@@ -1,21 +1,35 @@
-"""Paths and settings. Secrets and tokens live outside the repo, in %APPDATA%\\MusicQueery\\companion."""
+"""Paths and settings. Secrets and tokens live outside the repo: %APPDATA%\\MusicQueery\\companion on Windows,
+~/.config/MusicQueery/companion on Linux. Downloads, the chart index and the work area: %LOCALAPPDATA%\\MusicQueery
+on Windows, ~/.local/share/MusicQueery on Linux."""
 
 from __future__ import annotations
 
 import json
 import os
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+WINDOWS = sys.platform == "win32"
+
 REPO = Path(__file__).resolve().parents[3]
 COMPANION = REPO / "companion"
-CAPTURE_EXE = COMPANION / "capture" / "bin" / "mqcapture.exe"
+CAPTURE_EXE = COMPANION / "capture" / "bin" / "mqcapture.exe"  # Windows capture (D-33)
 TIMELINE_SCHEMA = REPO / "packages" / "model" / "schema" / "timeline.v1.json"
 TRUTH_DIR = COMPANION / "truth"
 
-CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "MusicQueery" / "companion"
-WORK_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "MusicQueery" / "work"
+if WINDOWS:
+    CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "MusicQueery" / "companion"
+    LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "MusicQueery"
+else:
+    CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "MusicQueery" / "companion"
+    LOCAL = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "MusicQueery"
+WORK_DIR = LOCAL / "work"
+
+# Linux capture: librespot plays into this silent PipeWire sink and mqc records its monitor (companion/linux).
+CAPTURE_SINK = os.environ.get("MQ_CAPTURE_SINK", "mqc_capture")
+LINUX_DEVICE_NAME = "MusicQueery server"  # librespot's Spotify Connect name (companion/linux/librespot.service)
 
 DEFAULT_API = "https://musicqueery.ethangruening.workers.dev/api"
 SPOTIFY_REDIRECT_PORT = 5173  # http://127.0.0.1:5173/callback is the dev redirect the Spotify app already allows

@@ -1,0 +1,19 @@
+# MusicQueery companion (Linux): the Spotify Connect player that capture plays songs on (D-33's Spotify app, headless).
+# Plays into the silent PipeWire sink mqc_capture at full volume; caches the login only, never audio (D-18).
+# Installed to ~/.config/systemd/user/ by companion/linux/install.sh.
+[Unit]
+Description=MusicQueery capture player (librespot into the silent mqc_capture sink)
+After=pipewire.service pipewire-pulse.service
+Wants=pipewire-pulse.service
+
+[Service]
+ExecStart=%h/.cargo/bin/librespot \
+  --name "MusicQueery server" --device-type computer \
+  --backend pulseaudio --device mqc_capture \
+  --bitrate 320 --initial-volume 100 --volume-ctrl fixed \
+  --cache %h/.cache/mqc-librespot --disable-audio-cache --disable-discovery
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

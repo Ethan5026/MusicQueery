@@ -14,15 +14,14 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import cache
-from pathlib import Path
 
 import numpy as np
 import soxr
 
 from . import bridge
+from .config import LOCAL
 
 Segments = list[tuple[float, float, str]]
-LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "MusicQueery"
 VAMP_DIR = LOCAL / "vamp"
 BTC_DIR = LOCAL / "dl" / "BTC-ISMIR19-master"
 

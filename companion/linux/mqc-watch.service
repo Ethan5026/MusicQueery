@@ -1,0 +1,16 @@
+# MusicQueery companion (Linux): `mqc watch` (M5, D-46/D-54/D-56) as a user service on the always-on box.
+# Installed to ~/.config/systemd/user/ by companion/linux/install.sh. Logs: journalctl --user -u mqc-watch -f
+[Unit]
+Description=MusicQueery companion: analyse queued songs and the playlist inbox
+After=network-online.target mqc-librespot.service
+Wants=mqc-librespot.service
+
+[Service]
+WorkingDirectory=%h/repos/MusicQueery
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/.local/bin/uv run --project companion --frozen mqc watch
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=default.target

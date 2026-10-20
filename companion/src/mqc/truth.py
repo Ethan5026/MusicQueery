@@ -2,8 +2,8 @@
 
 `mqc tap` plays a track on this PC, captures it, and records key presses: ENTER on beat 1 of every bar,
 SPACE on the other beats (or ENTER only, one per bar). Taps are stored in track milliseconds in
-companion/truth/<name>.json; the captured audio stays in %LOCALAPPDATA%\\MusicQueery\\work\\truth (never
-committed, deleted when M3 is done).
+companion/truth/<name>.json; the captured audio stays in config.WORK_DIR/truth (never committed, deleted when M3
+is done).
 
 The same JSON then gets a `form` (written by hand) that says what is played over the tapped bars:
     "chart": {"playlist": "jazz1460", "title": "Autumn Leaves", "transpose": "F"},
@@ -27,7 +27,7 @@ import numpy as np
 import soundfile as sf
 
 from . import bridge
-from .capture import _first_packet_qpc_ns, capture_track
+from .capture import capture_track
 from .config import REPO, TRUTH_DIR, WORK_DIR
 from .spotify import Spotify
 
@@ -70,7 +70,7 @@ def tap(sp: Spotify, track_id: str, name: str, device_name: str = "", keys: bool
     finally:
         stop.set()
     print()
-    qpc0 = _first_packet_qpc_ns(cap.wav)
+    qpc0 = cap.first_frame_ns
     tap_ms = [((t - qpc0) / 1e6 - cap.offset_ms, k) for t, k in taps]
     TRUTH_AUDIO.mkdir(parents=True, exist_ok=True)
     sf.write(audio_path(name), cap.track_audio(mono=True), cap.rate, format="FLAC")

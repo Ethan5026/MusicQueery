@@ -1,12 +1,15 @@
-"""Builds Chordino (the NNLS Chroma Vamp plugin) and the `vamp` Python host for Windows/MSVC (SP4 bake-off).
+"""Builds Chordino (the NNLS Chroma Vamp plugin), and on Windows the `vamp` Python host (SP4 bake-off).
 
-Neither ships a usable Windows build: nnls-chroma needs Boost and the plugin pack is a GUI installer; the `vamp`
-sdist uses POSIX `ssize_t`. This script downloads the sources into %LOCALAPPDATA%\\MusicQueery\\dl, patches them,
-and writes
+Windows/MSVC: neither ships a usable build: nnls-chroma needs Boost and the plugin pack is a GUI installer; the
+`vamp` sdist uses POSIX `ssize_t`. This script downloads the sources into %LOCALAPPDATA%\\MusicQueery\\dl, patches
+them, and writes
   %LOCALAPPDATA%\\MusicQueery\\vamp\\nnls-chroma.dll    (point VAMP_PATH here; mqc does it automatically)
   companion\\.wheels\\vamp-1.1.0-cp312-cp312-win_amd64.whl
 
-Usage (from the repo root): python companion/scripts/build_chordino.py
+Linux (gcc/g++): the same Boost-free patch, built into ~/.local/share/MusicQueery/vamp/nnls-chroma.so. The `vamp`
+host comes from the PyPI sdist through `uv sync` (pyproject.toml), so no wheel is built here.
+
+Usage (from the repo root): python companion/scripts/build_chordino.py   (Linux: uv run --no-project python ...)
 """
 
 from __future__ import annotations
@@ -23,9 +26,17 @@ import zipfile
 from pathlib import Path
 
 COMPANION = Path(__file__).resolve().parents[1]
-LOCAL = Path(os.environ["LOCALAPPDATA"]) / "MusicQueery"
+WINDOWS = sys.platform == "win32"
+if WINDOWS:
+    LOCAL = Path(os.environ["LOCALAPPDATA"]) / "MusicQueery"
+else:  # same place as mqc.config.LOCAL
+    LOCAL = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "MusicQueery"
 DL = LOCAL / "dl" / "chordino-build"
 OUT_DLL = LOCAL / "vamp" / "nnls-chroma.dll"
+OUT_SO = LOCAL / "vamp" / "nnls-chroma.so"
+NNLS_SOURCES = ["chromamethods.cpp", "NNLSBase.cpp", "NNLSChroma.cpp", "Chordino.cpp", "Tuning.cpp", "plugins.cpp"]
+NNLS_SOURCES += ["nnls.c", "viterbi.cpp"]
+SDK_SOURCES = ["PluginAdapter.cpp", "RealTime.cpp", "FFT.cpp"]
 WHEELS = COMPANION / ".wheels"
 
 NNLS = "https://github.com/c4dm/nnls-chroma/archive/refs/heads/master.zip"
@@ -110,20 +121,7 @@ def patch_nnls(src: Path) -> None:
 def build_dll(nnls: Path, sdk: Path, env: dict[str, str]) -> None:
     obj = DL / "obj"
     obj.mkdir(exist_ok=True)
-    srcs = [
-        nnls / f
-        for f in [
-            "chromamethods.cpp",
-            "NNLSBase.cpp",
-            "NNLSChroma.cpp",
-            "Chordino.cpp",
-            "Tuning.cpp",
-            "plugins.cpp",
-            "nnls.c",
-            "viterbi.cpp",
-        ]
-    ]
-    srcs += [sdk / "src" / "vamp-sdk" / f for f in ["PluginAdapter.cpp", "RealTime.cpp", "FFT.cpp"]]
+    srcs = [nnls / f for f in NNLS_SOURCES] + [sdk / "src" / "vamp-sdk" / f for f in SDK_SOURCES]
     (DL / "nnls.def").write_text("EXPORTS\n  vampGetPluginDescriptor\n")
     OUT_DLL.parent.mkdir(parents=True, exist_ok=True)
     cl = shutil.which("cl", path=env.get("Path") or env.get("PATH"))
@@ -174,14 +172,34 @@ def build_vamp_wheel(env: dict[str, str]) -> None:
     )
 
 
+def build_so(nnls: Path, sdk: Path) -> None:
+    """Linux: compile with gcc (nnls.c) and g++ (the rest), export only the Vamp entry point."""
+    obj = DL / "obj"
+    obj.mkdir(exist_ok=True)
+    flags = ["-O2", "-fPIC", "-w", "-D_USE_MATH_DEFINES", f"-I{sdk}", f"-I{nnls}"]
+    objs = []
+    for src in [nnls / f for f in NNLS_SOURCES] + [sdk / "src" / "vamp-sdk" / f for f in SDK_SOURCES]:
+        o = obj / (src.stem + ".o")
+        cc = "gcc" if src.suffix == ".c" else "g++"
+        subprocess.run([cc, *flags, "-c", str(src), "-o", str(o)], check=True)
+        objs.append(str(o))
+    OUT_SO.parent.mkdir(parents=True, exist_ok=True)
+    link = ["g++", "-shared", "-o", str(OUT_SO), *objs, f"-Wl,--version-script={nnls / 'vamp-plugin.map'}"]
+    subprocess.run(link, check=True)
+    print(f"built {OUT_SO}")
+
+
 def main() -> None:
     if DL.exists():
         shutil.rmtree(DL)
     DL.mkdir(parents=True)
-    env = vcvars_env()
     nnls = fetch_zip(NNLS, DL)
     sdk = fetch_zip(SDK, DL)
     patch_nnls(nnls)
+    if not WINDOWS:
+        build_so(nnls, sdk)
+        return
+    env = vcvars_env()
     build_dll(nnls, sdk, env)
     build_vamp_wheel(env)
 

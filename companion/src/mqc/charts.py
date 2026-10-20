@@ -22,8 +22,8 @@ import mir_eval
 import numpy as np
 
 from . import bridge
+from .config import LOCAL
 
-LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "MusicQueery"
 CSV_PATH = LOCAL / "dl" / "chordonomicon" / "chordonomicon_v2.csv"
 CSV_URL = "https://huggingface.co/datasets/ailsntua/Chordonomicon/resolve/main/chordonomicon_v2.csv"
 DB_PATH = LOCAL / "chordonomicon.sqlite"
