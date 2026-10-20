@@ -55,7 +55,7 @@ cat <<EOF
 
 Installed. Remaining one-time steps:
   1. librespot login (prints a link; approve it, then Ctrl+C once it says it is connected):
-       ~/.cargo/bin/librespot --name "MusicQueery server" --backend pulseaudio --device mqc_capture \\
+       PULSE_SINK=mqc_capture ~/.cargo/bin/librespot --name "MusicQueery server" --backend pulseaudio \\
          --cache ~/.cache/mqc-librespot --disable-audio-cache --disable-discovery --enable-oauth
   2. Companion config + Spotify login: copy config.json to ~/.config/MusicQueery/companion/, then pnpm companion:linux login
   3. systemctl --user enable --now mqc-librespot mqc-watch
