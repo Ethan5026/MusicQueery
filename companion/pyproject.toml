@@ -12,6 +12,7 @@ dependencies = [
   "jsonschema>=4.23",
   "psutil>=6.0",
   "torch>=2.5",
+  "torchaudio",  # via demucs; listed so it comes from the CPU index too (PyPI's Linux wheel is a CUDA build)
   "beat-this>=1.0",
   "mir-eval>=0.8",
   # chord recognisers voted together (D-34); vamp is built by scripts/build_chordino.py, BTC is fetched by hand (handoff)
@@ -49,6 +50,7 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
 # madmom 0.16.1 on PyPI does not build on 3.12
 madmom = { git = "https://github.com/CPJKU/madmom" }
 # Windows: built by scripts/build_chordino.py (the PyPI sdist does not compile with MSVC). Linux: the PyPI sdist.
