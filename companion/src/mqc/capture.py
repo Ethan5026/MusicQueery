@@ -28,9 +28,10 @@ import soundfile as sf
 from .config import CAPTURE_EXE, CAPTURE_SINK, LINUX_DEVICE_NAME, WINDOWS, Settings
 from .spotify import PlayerState, Spotify, SpotifyError
 
-# Linux only: Spotify's progress_ms for librespot runs ahead of the audio by this much, so the median offset is moved
-# later to match the Windows captures the truth set and the phone's calibration were made with. Measured on the mini
-# PC by cross-correlating 20 captures with the Windows truth audio: 114-145 ms, median 121 (D-84, M11).
+# Linux only: Spotify's progress_ms for librespot lags the audio by this much (track content came out this much early),
+# so it is taken off the median offset to match the Windows captures the truth set and the phone's calibration were
+# made with. Measured on the mini PC by cross-correlating 20 captures with the Windows truth audio: 114-145 ms,
+# median 121 (D-84, M11).
 LIBRESPOT_ALIGN_MS = 120.0
 
 
@@ -353,7 +354,7 @@ def _capture_track(
     if len(jumps) > max(2, len(offsets) // 20):
         raise CaptureError(f"playback was not continuous ({len(jumps)} of {len(offsets)} samples off by > 400 ms)")
     if not WINDOWS:
-        med += LIBRESPOT_ALIGN_MS
+        med -= LIBRESPOT_ALIGN_MS
     info = sf.info(wav)
     cap = Capture(
         track_id=track_id,
