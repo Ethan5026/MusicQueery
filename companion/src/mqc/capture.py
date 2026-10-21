@@ -28,7 +28,6 @@ import soundfile as sf
 from .config import CAPTURE_EXE, CAPTURE_SINK, LINUX_DEVICE_NAME, WINDOWS, Settings
 from .spotify import PlayerState, Spotify, SpotifyError
 
-
 # Linux only: Spotify's progress_ms for librespot runs ahead of the audio by this much, so the median offset is moved
 # later to match the Windows captures the truth set and the phone's calibration were made with. Measured on the mini
 # PC by cross-correlating 20 captures with the Windows truth audio: 114-145 ms, median 121 (D-84, M11).
