@@ -373,6 +373,31 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   covered by as many whole opening bars of the next line as fit in that room (clip-path, cut at the next line's bar lines), and the
   next line takes over the whole width when the current one ends. A line that comes in fades over .25 s; the playhead glides between lines.
 
+- **D-83** (M11, user chose librespot over the official client; extends D-18/D-33) The companion also runs on Linux: the always-on
+  Ubuntu mini PC (`gru-server`, user `gruman`). Spotify plays on **librespot 0.8** (`--name "MusicQueery server"`, device type
+  Computer, 320 kbps, fixed volume, login cached in `~/.cache/mqc-librespot`, no audio cache), a headless Spotify Connect player run
+  as a systemd user service (`mqc-librespot`). It plays into `mqc_capture`, a silent PipeWire null sink (`gruman` has no sound
+  hardware, so nothing is audible), and `PipeWireRecorder` reads the sink's monitor with `pw-record` (raw s16 stereo 44.1 kHz).
+  Frame 0's time on `perf_counter_ns()` (CLOCK_MONOTONIC) is the lower envelope min(arrival − frames/rate) of the chunk arrivals; the
+  sink runs on PipeWire's dummy driver, timed by the same clock (17 s test: 4 ms drift, chunk lag 5 ms median, 12 ms max). The
+  D-33 alignment (median of capture time − progress_ms) is unchanged. Windows keeps WASAPI and mqcapture.exe. librespot takes plain
+  `play {uris}`; the official Linux client was not used (needs a desktop session, a VNC login and keeps D-33's start quirks).
+- **D-84** (M11) Linux alignment correction: Spotify's progress_ms for librespot lags the audio, so `LIBRESPOT_ALIGN_MS` = 120 is
+  taken off the median offset. Measured by cross-correlating 32 s Linux captures with the Windows truth audio (corr 0.96–1.00): 20
+  steady runs 114–145 ms, median 121 (Let It Be ≈ 120, Imagine ≈ 121, Don't Stop Me Now ≈ 143, the last likely the truth capture's
+  own D-33 error). Same-song repeats agree within 2–13 ms. Known risk: 3 of the first 17 runs were 80–190 ms further off with an
+  unremarkable MAD, and none of the next 14 were; librespot's own `--onevent` "playing" time was tried as the reference and was no
+  steadier (126–160 ms). Also seen: after ~40 loads in an hour librespot hit "Audio key response timeout" and skipped the track
+  (the capture fails as "track changed" and is retried, D-46). With the correction, Let It Be scores like the Windows timeline
+  in the store: MIREX sevenths 0.864 vs 0.860, beat F 0.996 vs 0.996.
+- **D-85** (M11) Linux layout: config `~/.config/MusicQueery/companion` (config.json, spotify.json), data
+  `~/.local/share/MusicQueery` (chart index, BTC, `vamp/nnls-chroma.so`, work), both from `config.py` (`LOCAL`, XDG). uv resolves for
+  `win32` and `linux x86_64`: `vamp` is the PyPI sdist on Linux (the MSVC wheel stays for Windows), `torchaudio` comes from the
+  PyTorch CPU index (PyPI's Linux wheel is a CUDA build that fails to load next to CPU torch). `build_chordino.py` builds the
+  Boost-free Chordino with g++ on Linux. `companion/linux/`: `install.sh` (needs `build-essential pkg-config libpulse-dev` once),
+  the sink config and two user units; `mqc-watch` gets node/pnpm for the theory bridge from the fnm alias `musicqueery`
+  (= `.node-version`). `pnpm companion:linux <cmd>` on Linux; `pnpm companion` stays the Windows command.
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries

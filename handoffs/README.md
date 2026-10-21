@@ -28,6 +28,8 @@ Older handoffs are history. Don't load them unless the current handoff points to
 | M7 | Listening live + Predicted | `M7-listen.md` | Mic chord detection, predicted chords, chart alignment, chord fixes |
 | M8 | Map, Coach, polish | `M8-polish.md` | All five tabs used in a week of real practice (built; practice week with the user) |
 | M9 | Melody + Solo view | `M9-melody.md` | The lead melody in your key on a big staff, with the scale below (built; play-along test with the user) |
+| M10 | Lead sheet view | `M10-lead-sheet.md` | The song engraved on staves in place of Solo (built; phone verdict with the user) |
+| M11 | Companion on Linux | `M11-linux-companion.md` | `mqc watch` analyses on the always-on Ubuntu mini PC (librespot + PipeWire) |
 
 Milestones were finalised in S2 (D-22). Later stages may split or reorder them, and update this table if they do.
 
