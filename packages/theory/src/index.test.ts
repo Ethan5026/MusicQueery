@@ -185,8 +185,22 @@ test('Autumn Leaves reads as one G minor region', () => {
 
 test('Coltrane changes find three key centres', () => {
   const gs = [['Bmaj7', 'D7'], ['Gmaj7', 'B♭7'], ['E♭maj7'], ['Am7', 'D7'], ['Gmaj7', 'B♭7'], ['E♭maj7', 'F♯7'], ['Bmaj7'], ['Fm7', 'B♭7']]
-  const r = regions(gs)
+  // a chart: no "most-held root" prior (charts pass their home key, which turns it off)
+  const items = gs.flatMap((b) => b.map((s) => ({ chord: parseChord(s)!, beats: 4 / b.length })))
+  const r = detectKeys(items, { tonicPrior: 0 }).regions.map((x) => keyName(x.key))
   expect(new Set(r)).toEqual(new Set(['B major', 'G major', 'E♭ major']))
+})
+
+test('recordings: a vamp is home, not a dominant (M12)', () => {
+  // Tower of Power's E9 groove with its 7♯9 heard as Em now and then: E, not V7 of A minor
+  const hip = [['E9'], ['E9'], ['Em'], ['E9'], ['E9'], ['Em'], ['C9'], ['E9'], ['Am', 'B9'], ['E9'], ['D9'], ['G9']]
+  expect(regions(hip)[0]).toMatch(/^E (major|minor)$/)
+  // Am7–D6 (It's Too Late's verse) is A Dorian: A minor, not ii–V in G or I in D
+  const late = [['Am7', 'D6'], ['Am7', 'D6'], ['Am7', 'D6'], ['Am7', 'D6']]
+  expect(regions(late)).toEqual(['A minor'])
+  // an E♭7 riff (Higher Ground) is in E♭, not V7 of A♭
+  const hg = [['E♭7'], ['E♭7'], ['E♭7'], ['E♭7'], ['F7'], ['F7'], ['A♭7'], ['D♭7']]
+  expect(regions(hg)).toEqual(['E♭ major'])
 })
 
 // ---------------------------------------------------------------- guide tones & ii–V–I

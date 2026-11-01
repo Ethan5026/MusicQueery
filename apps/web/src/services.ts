@@ -8,6 +8,7 @@
 
 import type { Part } from '@mq/band'
 import type { Timeline } from '@mq/model'
+import type { ChordDetail } from '@mq/theory'
 import { create } from 'zustand'
 import { unlock } from './audio/context'
 import { type Loop, band } from './audio/engine'
@@ -22,7 +23,8 @@ import { fetchPlayer, player } from './spotify/api'
 import { loadTokens, sp1Record, type Sp1Record } from './spotify/auth'
 import { idbGet, idbSet } from './store/idb'
 import { type Edit, loadEdits, saveEdits } from './timeline/edits'
-import { type ChartLink, alignLinked, loadLink, saveLink } from './timeline/link'
+import { loadDetail, saveDetail } from './timeline/detail'
+import { type ChartLink, UNLINKED, alignLinked, autoLink, loadLink, saveLink } from './timeline/link'
 import { DEMO_ID, type LoadResult, type TrackMeta, loadTimeline, revalidate, trackMeta } from './timeline/library'
 import { wakeLock } from './wakelock'
 
@@ -167,11 +169,15 @@ interface SessionState {
   live: Timeline | null
   /** the open track's chord fixes (M7), applied over whichever timeline is shown */
   edits: Edit[]
+  /** the open track's chord detail (M12): triads, as heard, or jazz lead-sheet 7ths */
+  detail: ChordDetail
   /** a chart linked to the open track (M7) and the timeline with its chords, shown instead of `timeline` */
   linked: { link: ChartLink; timeline: Timeline } | null
   setTab: (tab: Tab) => void
   /** Replaces the open track's fixes (saved on the phone and in the store). */
   setEdits: (edits: Edit[]) => void
+  /** Sets the open track's chord detail (saved on the phone). */
+  setDetail: (detail: ChordDetail) => void
   /** Opens a recorded timeline under the ManualClock. Resolves to the load result. */
   open: (id: string, startMs?: number) => Promise<LoadResult>
 }
@@ -195,7 +201,14 @@ export const useSession = create<SessionState>((set, get) => ({
   band: null,
   live: null,
   edits: [],
+  detail: 'heard',
   linked: null,
+  setDetail: (detail) => {
+    const id = get().id
+    if (!id) return
+    set({ detail })
+    void saveDetail(id, detail)
+  },
   setEdits: (edits) => {
     const id = get().id
     if (!id) return
@@ -211,7 +224,7 @@ export const useSession = create<SessionState>((set, get) => ({
     const mine = ++seq
     const keep = get()
     set({ status: 'loading', error: '' })
-    const [r, meta, edits] = await Promise.all([loadTimeline(id), trackMeta(id), loadEdits(id)])
+    const [r, meta, edits, detail] = await Promise.all([loadTimeline(id), trackMeta(id), loadEdits(id), loadDetail(id)])
     if (mine !== seq) return r
     if (r.status !== 'ok') {
       // Keep whatever was open; report why the new one didn't load.
@@ -220,7 +233,7 @@ export const useSession = create<SessionState>((set, get) => ({
     }
     band.pause()
     manual.load(id, r.timeline.durationMs, startMs)
-    set({ driver: 'manual', id, timeline: r.timeline, meta, status: 'ok', error: '', live: null, edits, linked: null })
+    set({ driver: 'manual', id, timeline: r.timeline, meta, status: 'ok', error: '', live: null, edits, detail, linked: null })
     void relink(id, r.timeline, mine)
     log('info', 'session.open', { id, from: r.from, chords: r.timeline.chords.length, startMs: Math.round(startMs) })
     if (r.from === 'cache') refreshLater(id, mine)
@@ -251,11 +264,11 @@ async function follow(trackId: string): Promise<void> {
     return
   }
   const mine = ++seq
-  useSession.setState({ driver: 'spotify', id, timeline: null, meta, status: 'loading', error: '', live: null, edits: [], linked: null })
-  const [r, m, edits] = await Promise.all([loadTimeline(id), meta ?? trackMeta(id), loadEdits(id)])
+  useSession.setState({ driver: 'spotify', id, timeline: null, meta, status: 'loading', error: '', live: null, edits: [], detail: 'heard', linked: null })
+  const [r, m, edits, detail] = await Promise.all([loadTimeline(id), meta ?? trackMeta(id), loadEdits(id), loadDetail(id)])
   if (mine !== seq) return
   log('info', 'session.follow', { id, status: r.status, ...(r.status === 'ok' ? { from: r.from } : {}) })
-  useSession.setState({ edits })
+  useSession.setState({ edits, detail })
   if (r.status === 'ok') {
     useSession.setState({ timeline: r.timeline, meta: m, status: 'ok' })
     void relink(id, r.timeline, mine)
@@ -277,13 +290,26 @@ function refreshLater(id: string, mine: number): void {
   })
 }
 
-/** Lays the track's linked chart (if any) over its timeline; a chart the alignment no longer trusts is not shown. */
+/**
+ * Lays the track's linked chart (if any) over its timeline; a chart the alignment no longer trusts is not shown. With no
+ * link yet, the charts that came with an analysis (and imported ones of the same title) are tried once (M12).
+ */
 async function relink(id: string, tl: Timeline, mine: number): Promise<void> {
+  if (tl.source === 'exact') return
   const link = await loadLink(id)
-  if (!link || tl.source === 'exact') return
-  const r = await alignLinked(tl, link)
+  if (link && link.ref !== 'none') {
+    const r = await alignLinked(tl, link)
+    if (mine !== seq || useSession.getState().id !== id) return
+    useSession.setState({ linked: r?.timeline ? { link, timeline: r.timeline } : null })
+    return
+  }
+  // the player unlinked (no `auto`), or nothing fitted this very analysis
+  if (link && (!link.auto || link.for === tl.createdAt)) return
+  if (tl.source !== 'analysed') return
+  const found = await autoLink(tl, useSession.getState().meta?.title ?? null)
   if (mine !== seq || useSession.getState().id !== id) return
-  useSession.setState({ linked: r?.timeline ? { link, timeline: r.timeline } : null })
+  await saveLink(id, found ? found.link : { ref: 'none', title: '', at: new Date().toISOString(), auto: true, for: tl.createdAt })
+  if (found) useSession.setState({ linked: found })
 }
 
 /** Links a chart to the open track (or unlinks with null). Resolves to what the alignment found. */
@@ -291,7 +317,7 @@ export async function linkChart(link: ChartLink | null): Promise<Awaited<ReturnT
   const { id, timeline } = useSession.getState()
   if (!id || !timeline) return null
   if (!link) {
-    await saveLink(id, null)
+    await saveLink(id, UNLINKED())
     useSession.setState({ linked: null })
     return null
   }
@@ -324,7 +350,7 @@ clock.onJump((e) => {
     if (s.id && s.timeline) {
       manual.load(s.id, s.timeline.durationMs, e.fromMs)
       useSession.setState({ driver: 'manual' })
-    } else useSession.setState({ driver: 'manual', id: null, meta: null, timeline: null, status: 'idle', error: '', live: null, edits: [], linked: null })
+    } else useSession.setState({ driver: 'manual', id: null, meta: null, timeline: null, status: 'idle', error: '', live: null, edits: [], detail: 'heard', linked: null })
   }
   if (useSession.getState().driver === 'spotify') {
     updateWake()
@@ -514,6 +540,7 @@ export async function openBand(spec: BandSpec, startMs = 0): Promise<boolean> {
     timeline,
     live: null,
     edits: [],
+    detail: 'heard',
     linked: null,
     meta: { id: timeline.id, title: chart.title, artist: specLine(spec), ...(chart.style ? { style: chart.style } : {}) },
     status: 'ok',

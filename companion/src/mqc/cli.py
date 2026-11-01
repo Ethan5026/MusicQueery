@@ -41,6 +41,9 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("names", nargs="*")
     s = sub.add_parser("requeue-melody", help="queue stored analyses that have no melody for re-capture (M9)")
     s.add_argument("--dry-run", action="store_true")
+    s = sub.add_parser("requeue-all", help="queue every stored analysis for re-capture with today's pipeline (M12)")
+    s.add_argument("--dry-run", action="store_true")
+    s.add_argument("--before", help="only analyses created before this ISO date (e.g. 2026-11-02)")
     s = sub.add_parser("tap", help="ground truth: play a track and tap its beats/bars")
     s.add_argument("track")
     s.add_argument("--name", required=True, help="short name, e.g. autumn-leaves")
@@ -296,7 +299,7 @@ def cmd_analyse_saved(a) -> None:
             continue
         audio, sr = sf.read(TRUTH_AUDIO / f"{name}.flac", dtype="float32")
         print(f"{rec['title']} — {rec['artist']}")
-        tl = analyse_audio(rec["trackId"], rec["durationMs"], audio, sr, sp=Spotify())
+        tl = analyse_audio(rec["trackId"], rec["durationMs"], audio, sr, sp=Spotify(), title=rec["title"])
         res = store.put(tl)
         print(f"  uploaded {res['id']} ({res['bytes']} bytes)")
 
@@ -353,6 +356,30 @@ def cmd_requeue_melody(a) -> None:
         else:
             print(f"queued {tid} {title or ''}: {store.queue_add(tid, title, redo=True)['state']}")
     print(f"{len(todo)} stored analyses without a melody" + (" (dry run)" if a.dry_run else ""))
+
+
+def cmd_requeue_all(a) -> None:
+    """Every analysed Spotify track in the store goes back in the queue with `redo`, so the watcher captures and
+    analyses it again (the audio was deleted, D-18). Fixes and links stay on the phone and in the store (D-67)."""
+    from .pipeline import OUT_DIR
+    from .store import Store
+
+    store = Store()
+    todo = [
+        t["id"]
+        for t in store.list()
+        if t["id"].startswith("spotify:track:")
+        and (t["meta"] or {}).get("source") == "analysed"
+        and (not a.before or ((t["meta"] or {}).get("createdAt") or "") < a.before)
+    ]
+    for tid in todo:
+        local = OUT_DIR / f"{tid.split(':')[-1]}.json"
+        title = json.loads(local.read_text(encoding="utf8")).get("title") if local.exists() else None
+        if a.dry_run:
+            print(f"would queue {tid} {title or ''}")
+        else:
+            print(f"queued {tid} {title or ''}: {store.queue_add(tid, title, redo=True)['state']}")
+    print(f"{len(todo)} stored analyses" + (" (dry run)" if a.dry_run else " queued for re-analysis"))
 
 
 def cmd_tap(a) -> None:
@@ -416,16 +443,17 @@ def cmd_bakeoff(a) -> None:
         bt = time.time() - t0
         per = {r: A.RECOGNISERS[r](audio, sr) for r in A.VOTE_WEIGHTS}
         end = len(audio) / sr
-        share = A.seventh_share(per["btc"])
         variants = []
         for rec in a.recognisers.split(","):
             synced = A.beat_sync(per[rec], beats.beats, end)
             variants += [(rec, "beat", synced, False), (rec, "beat+7", synced, True)]
         voted = A.vote(per, beats.beats, end)
+        smooth = A.vote_smooth(per, beats, end)
         variants += [
             ("vote", "beat", voted, False),
             ("vote", "beat+7", voted, True),
-            ("auto", f"7s={share:.2f}", voted, share >= A.JAZZ_SEVENTH_SHARE),
+            ("auto", "smooth", smooth, False),
+            ("auto", "smooth+7", smooth, True),
         ]
         for rec, mode, sg, sev in variants:
             tl, _ = A.build_timeline(truth["id"].split(":")[-1], truth["durationMs"], beats, sg, rec, sevenths=sev)

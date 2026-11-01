@@ -11,6 +11,10 @@ from typing import Any
 from .config import REPO
 
 BRIDGE = REPO / "packages" / "theory" / "dist" / "bridge.mjs"
+CORPUS = REPO / "packages" / "theory" / "corpus"
+# iReal's official playlists (D-30), best first: standards, then the rest. Pop 400 too: on Let It Be its chart lined up
+# over the recognisers scores above them against the human annotation (M12).
+CORPUS_LISTS = ["jazz1460", "brazilian220", "latin50", "blues50", "pop400", "country50"]
 SOURCES = [REPO / "packages" / "theory" / "scripts" / "bridge.ts", *(REPO / "packages" / "theory" / "src").glob("*.ts")]
 
 
@@ -46,3 +50,10 @@ def harte(symbols: list[str]) -> list[str | None]:
 
 def chart(playlist: str, title: str) -> dict:
     return call({"op": "chart", "playlist": playlist, "title": title})
+
+
+def find_charts(title: str) -> list[dict]:
+    """Chart v1 for every iReal chart titled like the track (at most 4); empty when the corpus isn't fetched
+    (`pnpm --filter @mq/theory corpus`)."""
+    lists = [str(CORPUS / f"{n}.txt") for n in CORPUS_LISTS if (CORPUS / f"{n}.txt").exists()]
+    return call({"op": "find", "title": title, "playlists": lists})["charts"] if lists else []

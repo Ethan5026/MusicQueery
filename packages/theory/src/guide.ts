@@ -66,21 +66,29 @@ export interface TwoFive {
 const isII = (c: Chord): boolean => family(c) === 'min' || family(c) === 'half'
 const isI = (c: Chord): boolean => family(c) === 'maj' || family(c) === 'min'
 
-/** Finds ii–V–I (and unresolved ii–V) spans. Tritone-sub Vs (ii–♭II7–I) count. */
+/** A plain major triad (as recordings are often heard: G, not G7). */
+const isTriad = (c: Chord): boolean => family(c) === 'maj' && c.seventh === 'none' && c.tensions.length === 0 && c.fifth === 'p'
+
+/**
+ * Finds ii–V–I (and unresolved ii–V) spans. Tritone-sub Vs (ii–♭II7–I) count. A V heard as a plain triad counts only
+ * when it lands on its I (Dm–G–C is a ii–V–I; Dm–G alone may be i–IV in D minor), so recordings analysed as heard
+ * still show their ii–Vs (M12).
+ */
 export function findTwoFives(chords: ChordSymbol[]): TwoFive[] {
   const out: TwoFive[] = []
   for (let j = 0; j + 1 < chords.length; j++) {
     const a = chords[j]!
     const b = chords[j + 1]!
-    if (a.kind !== 'chord' || b.kind !== 'chord' || !isII(a) || family(b) !== 'dom') continue
+    if (a.kind !== 'chord' || b.kind !== 'chord' || !isII(a) || (family(b) !== 'dom' && !isTriad(b))) continue
     const ra = pc(a.root)
     const rb = pc(b.root)
     const plain = mod(rb - ra, 12) === 5
-    const sub = mod(rb - ra, 12) === 11
+    const sub = mod(rb - ra, 12) === 11 && family(b) === 'dom'
     if (!plain && !sub) continue
     const c = chords[j + 2]
     const targetPc = mod(ra - 2, 12)
     const resolved = c?.kind === 'chord' && isI(c) && pc(c.root) === targetPc
+    if (isTriad(b) && !resolved) continue
     const at = chordTones(a)
     const bt = chordTones(b)
     const line = [slot(at, '7'), slot(bt, '3')].filter((n): n is Note => !!n)

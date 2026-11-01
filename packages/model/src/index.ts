@@ -132,6 +132,11 @@ export const Timeline = z.object({
   tempo: z.array(TimelineTempo),
   edits: z.array(TimelineEdit).default([]),
   melody: z.array(MelodyNote).optional().describe('Lead melody (M9), ascending by startMs'),
+  charts: z
+    .array(Chart)
+    .max(4)
+    .optional()
+    .describe('iReal charts whose title matches the track (M12); the phone lines them up and links the one that fits'),
 })
 
 export type NoteName = z.infer<typeof NoteName>

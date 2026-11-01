@@ -1,13 +1,14 @@
 // Fix a chord (M7, `edits[]`): tap the chord on Stand, pick what it really is. The picker shows written pitch for the
 // instrument in use and stores concert pitch. A fix covers this chord, or every chord with the same name in the song
 // (a recogniser tends to make the same mistake each chorus). Fixes are kept per track and survive re-analysis.
+// M12: the same sheet sets the song's chord detail: plain triads, as heard, or the 7ths a jazz lead sheet would write.
 import type { Timeline } from '@mq/model'
 import { type Moment, analyseTimeline, chordToConcert, chordToWritten, formatChord, formatQuality, neutral, parseChord, pc } from '@mq/theory'
 import { useMemo, useState } from 'react'
 import { useSession } from '../../services'
 import { useSettings } from '../../store/settings'
 import { makeEdit } from '../../timeline/edits'
-import { Acc } from '../atoms'
+import { Acc, Seg } from '../atoms'
 import { useStandUi } from './live'
 
 const QUALITIES: [string, string][] = [
@@ -27,7 +28,7 @@ const QUALITIES: [string, string][] = [
 export function FixChord({ tl, m }: { tl: Timeline; m: Moment }) {
   const close = () => useStandUi.getState().setFixing(false)
   const inst = useSettings((s) => s.instrument)
-  const { edits, setEdits } = useSession()
+  const { edits, setEdits, detail, setDetail } = useSession()
   const events = useMemo(() => analyseTimeline(tl).events, [tl])
   const ev = events[m.eventIndex]
   const current = ev?.chord.kind === 'chord' ? chordToWritten(ev.chord, inst) : null
@@ -99,6 +100,26 @@ export function FixChord({ tl, m }: { tl: Timeline; m: Moment }) {
             <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
             Every <Acc text={formatChord(ev.chord.kind === 'chord' ? chordToWritten(ev.chord, inst) : ev.chord)} /> in this song ({same.length})
           </label>
+        )}
+        {tl.source !== 'exact' && (
+          <div className="fix-detail">
+            <span className="cal-hint">This song’s chords</span>
+            <Seg
+              mini
+              name="fdetail"
+              label="Chord detail"
+              value={detail}
+              options={[
+                ['triads', 'Triads'],
+                ['heard', 'As heard'],
+                ['lead', 'Jazz 7ths'],
+              ]}
+              onChange={(v) => {
+                setDetail(v)
+                close()
+              }}
+            />
+          </div>
         )}
         {ev && tl.id.startsWith('spotify:') && (
           <button

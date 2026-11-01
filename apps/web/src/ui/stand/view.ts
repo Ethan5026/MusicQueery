@@ -34,7 +34,8 @@ function info(tl: Timeline): Info {
   const out: Info = {
     home: tonic && mode ? { tonic, mode: mode as MomentKey['mode'] } : null,
     form,
-    lastBar: tl.bars.at(-1)?.number ?? 0,
+    // a linked chart numbers bars by their place in its form, starting again each chorus (M12: "Bar 15 of 13")
+    lastBar: tl.bars.reduce((m, b) => Math.max(m, b.number), 0),
   }
   cache.set(tl, out)
   return out

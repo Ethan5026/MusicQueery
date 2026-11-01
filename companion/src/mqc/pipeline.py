@@ -14,7 +14,7 @@ from .config import COMPANION, WORK_DIR
 from .spotify import Spotify
 from .store import Store
 
-DEFAULT_RECOGNISER = "auto"  # vote of BTC/Chordino/madmom as heard (D-38; handoffs/M3-analysis.md)
+DEFAULT_RECOGNISER = "auto"  # BTC/Chordino/madmom vote as heard (D-38), smoothed by harmonic rhythm (M12)
 OUT_DIR = COMPANION / "out"
 
 
@@ -28,10 +28,12 @@ def analyse_audio(
     log=print,
     sp=None,
     melody_audio: np.ndarray | None = None,
+    title: str | None = None,
 ) -> dict:
     """With `sp` (a Spotify client), a published chart for the track supplies the chord names when its alignment
     agrees with what we hear (D-40). With `melody_audio` (the capture, stereo if possible) the lead melody is
-    transcribed too (M9)."""
+    transcribed too (M9). With `title`, iReal charts of that title travel with the timeline for the phone to line up
+    (M12)."""
     t0 = time.time()
     beats = beats or A.track_beats(audio, sr)
     ch = A.recognise(audio, sr, beats, recogniser)
@@ -48,6 +50,8 @@ def analyse_audio(
         )
     if unparsed:
         log(f"  unparsed labels (stored as N.C.): {sorted(set(unparsed))}")
+    if title:
+        add_charts(tl, title, log)
     if melody_audio is not None:
         add_melody(tl, melody_audio, sr, beats.beats, log)
     errs = A.validate_timeline(tl)
@@ -55,6 +59,22 @@ def analyse_audio(
         raise ValueError(f"timeline invalid: {errs[:5]}")
     log(f"  analysed in {time.time() - t0:.0f} s: {A.summary(tl)}")
     return tl
+
+
+def add_charts(tl: dict, title: str, log=print) -> None:
+    """iReal charts titled like the track (M12). The phone aligns each (D-68) and links the one it trusts, so a chart
+    of another song with the same title is refused there, not here. A failure only costs the suggestion."""
+    from . import bridge
+
+    try:
+        charts = bridge.find_charts(title)
+    except Exception as e:  # noqa: BLE001  the charts are optional
+        log(f"  chart lookup failed: {e}")
+        return
+    if charts:
+        tl["charts"] = charts
+        names = [f"{c['title']} ({(c.get('source') or {}).get('playlist', '?')})" for c in charts]
+        log(f"  iReal charts titled like it: {', '.join(names)}")
 
 
 def add_melody(tl: dict, audio: np.ndarray, sr: int, beats_s: np.ndarray, log=print) -> None:
@@ -134,6 +154,7 @@ def analyse_track(
             log=log,
             sp=sp,
             melody_audio=stereo if with_melody else None,
+            title=meta["name"],
         )
     finally:
         cap.delete()

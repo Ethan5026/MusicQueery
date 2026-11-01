@@ -5,14 +5,17 @@
 //   {op:'harte', symbols:[...]}                → {harte:[...]}  (null where a symbol does not parse)
 //   {op:'chart', playlist:path, title, transpose?:tonic} → {chart, played:PlayedBar[], issues}
 //   {op:'titles', playlist:path}               → {titles:[...]}
+//   {op:'find', title, playlists:[path]}       → {charts:[Chart]} (M12: charts whose title matches the track's, best
+//                                                playlist first, without the raw iReal string)
 import { readFileSync } from 'node:fs'
-import { expandChart, finishAnalysis, importPlaylist, parseChord, toHarte, transposeChart } from '../src/index'
+import { expandChart, finishAnalysis, importPlaylist, parseChord, songKey, toHarte, transposeChart } from '../src/index'
 
 type Req =
   | { op: 'finish'; chords: Parameters<typeof finishAnalysis>[0]; beats: number[]; harte?: boolean; sevenths?: boolean }
   | { op: 'harte'; symbols: string[] }
   | { op: 'chart'; playlist: string; title: string; transpose?: string }
   | { op: 'titles'; playlist: string }
+  | { op: 'find'; title: string; playlists: string[] }
 
 const norm = (s: string): string =>
   s
@@ -33,6 +36,18 @@ function handle(req: Req): unknown {
           return c ? toHarte(c) : null
         }),
       }
+    case 'find': {
+      const want = songKey(req.title)
+      const charts = []
+      for (const path of req.playlists) {
+        for (const r of importPlaylist(readFileSync(path, 'utf8')).results) {
+          if (songKey(r.chart.title) !== want || charts.length >= 4) continue
+          const { source, ...chart } = r.chart
+          charts.push(source ? { ...chart, source: { kind: source.kind, ...(source.playlist ? { playlist: source.playlist } : {}) } } : chart)
+        }
+      }
+      return { charts }
+    }
     case 'titles':
       return { titles: importPlaylist(readFileSync(req.playlist, 'utf8')).results.map((r) => r.chart.title) }
     case 'chart': {

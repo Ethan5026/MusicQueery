@@ -1,7 +1,7 @@
 // Hooks that tie the Stand screens to the active clock (D-16): the moment, a per-frame bus for things that move
 // every frame (progress bar, playhead), the sync badge state, and the phone's orientation.
 import type { Timeline } from '@mq/model'
-import { type Moment, analyseTimeline, moment } from '@mq/theory'
+import { type Moment, analyseTimeline, moment, withChordDetail } from '@mq/theory'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { create } from 'zustand'
 import { type SyncState, sameSync, syncState } from '../../clock/sync'
@@ -15,13 +15,13 @@ import { withEdits } from '../../timeline/edits'
 export const frameBus = new Set<(pos: number, dur: number) => void>()
 
 /** The timeline Stand, Map and Coach show: while listening the live view, else a linked chart, else the open
- *  timeline; the player's chord fixes on top (M7). */
+ *  timeline; at the track's chord detail (M12), with the player's chord fixes on top (M7). */
 export function useShown(): Timeline | null {
-  const { timeline, live, linked, edits } = useSession()
+  const { timeline, live, linked, edits, detail } = useSession()
   return useMemo(() => {
     const base = live ?? linked?.timeline ?? timeline
-    return base ? withEdits(base, edits) : null
-  }, [live, linked, timeline, edits])
+    return base ? withEdits(withChordDetail(base, detail), edits) : null
+  }, [live, linked, timeline, edits, detail])
 }
 
 /** theory.moment() at the active clock, recomputed when the beat or the chord changes. */

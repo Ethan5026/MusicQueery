@@ -400,3 +400,65 @@ test('fix a chord: it shows at once, is sent to the store, and survives a reload
   await page.getByRole('button', { name: /Undo all my fixes/ }).click()
   await expect(hero(page)).toHaveText(was)
 })
+
+// M12: the companion sends iReal charts titled like the track inside the timeline; the phone lines them up and links
+// the one that fits by itself (jazz-side lists only). A hand-made chart of Let It Be's verse/chorus stands in for iReal's.
+const LET_IT_BE_CHART = {
+  schema: 'mq.chart/1',
+  id: 'ireal-let-it-be-test',
+  title: 'Let It Be',
+  key: { tonic: 'C', mode: 'major' },
+  meter: { num: 4, den: 4 },
+  bars: [
+    { chords: [{ symbol: 'C', beats: 2 }, { symbol: 'G7', beats: 2 }] },
+    { chords: [{ symbol: 'Am7', beats: 2 }, { symbol: 'Fmaj7', beats: 2 }] },
+    { chords: [{ symbol: 'C', beats: 2 }, { symbol: 'G7', beats: 2 }] },
+    { chords: [{ symbol: 'Fmaj7', beats: 2 }, { symbol: 'C', beats: 2 }] },
+  ],
+  source: { kind: 'ireal', playlist: 'Jazz 1460' },
+}
+
+test('a pop chart that came with the analysis is offered, not linked by itself', async ({ page }) => {
+  const pop = { ...LET_IT_BE_CHART, source: { kind: 'ireal', playlist: 'Pop 400' } }
+  const withChart = JSON.stringify({ ...JSON.parse(LET_IT_BE), charts: [pop] })
+  await page.route(`**/api/timelines/spotify:track:${LET_IT_BE_ID}`, (r) => r.fulfill({ body: withChart, contentType: 'application/json' }))
+  await page.goto('/')
+  await expect(hero(page)).toBeVisible()
+  await expect(page.getByText('Up next', { exact: true })).toBeVisible()
+  await hero(page).click()
+  await page.getByRole('button', { name: /Link an iReal chart/ }).click()
+  await expect(page.getByTestId('link-options')).toContainText('Came with the analysis · Pop 400')
+  await page.getByTestId('link-options').getByRole('button', { name: /Let It Be/ }).first().click()
+  await expect(page.getByTestId('link-result')).toContainText('Linked Let It Be')
+})
+
+test('a jazz chart that came with the analysis links itself; unlinking sticks', async ({ page }) => {
+  const withChart = JSON.stringify({ ...JSON.parse(LET_IT_BE), charts: [LET_IT_BE_CHART] })
+  await page.route(`**/api/timelines/spotify:track:${LET_IT_BE_ID}`, (r) => r.fulfill({ body: withChart, contentType: 'application/json' }))
+  await page.goto('/')
+  await expect(page.getByText('Up next · Let It Be chart')).toBeVisible()
+  await hero(page).click()
+  await page.getByRole('button', { name: /Link an iReal chart/ }).click()
+  await expect(page.getByText('Linked automatically: Let It Be')).toBeVisible()
+  await expect(page.getByTestId('link-options')).toContainText('Came with the analysis · Jazz 1460')
+  await page.getByRole('button', { name: 'Unlink' }).click()
+  await expect(page.getByText('Up next', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(hero(page)).toBeVisible()
+  await expect(page.getByText('Up next', { exact: true })).toBeVisible()
+  await expect(page.getByText('Up next · Let It Be chart')).toHaveCount(0)
+})
+
+test('chord detail: jazz 7ths, triads, as heard — per track, kept after a reload', async ({ page }) => {
+  await page.goto('/')
+  const was = chordAt(30_000)
+  await expect(hero(page)).toHaveText(was)
+  await hero(page).click()
+  await page.locator('label[for="fdetail-lead"]').click()
+  await expect(hero(page)).toHaveText(/7/)
+  await page.reload()
+  await expect(hero(page)).toHaveText(/7/)
+  await hero(page).click()
+  await page.locator('label[for="fdetail-heard"]').click()
+  await expect(hero(page)).toHaveText(was)
+})

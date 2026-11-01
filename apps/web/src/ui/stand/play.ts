@@ -124,7 +124,8 @@ export function playView(m: Moment, mode: PlayMode, opts: { preview?: boolean } 
       callout: { kind: 'keychange', lead: `${keyTitle(kc.to)} in ${kc.inBeats} beat${kc.inBeats === 1 ? '' : 's'}`, changed },
     }
   }
-  const outside = m.tones.map((t) => t.name).filter((n) => !scale.some((s) => pcOf(s) === pcOf(n)))
+  // the chord's tensions count too: E9's F♯ must not meet the key's F (M12)
+  const outside = [...m.tones.map((t) => t.name), ...m.tensions].filter((n) => !scale.some((s) => pcOf(s) === pcOf(n)))
   if (outside.length && m.chord) {
     const { notes, changed } = alterScale(scale, outside)
     return {

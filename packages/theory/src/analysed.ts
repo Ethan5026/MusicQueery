@@ -3,7 +3,7 @@
 // detected key, the way a lead sheet in that key would write them.
 import type { Timeline } from '@mq/model'
 import { type Chord, type ChordSymbol, NC, family, formatChord, parseChord } from './chord'
-import type { Key } from './numeral'
+import { type Key, isDiatonic } from './numeral'
 import { type Note, mod, noteName, pc, spell } from './pitch'
 import { detectKeys } from './regions'
 
@@ -29,10 +29,21 @@ const NEUTRAL: Note[] = STEPS.map((l, p) => spell(l, p))
 /** C D♭ D E♭ E F F♯ G A♭ A B♭ B (C major's names): the spelling used before a key is known. */
 export const neutral = (p: number): Note => NEUTRAL[mod(p, 12)]!
 
+/** C♭ E♯ F♭ B♯: white keys written with an accidental, which players read as B F E C. */
+const awkward = (n: Note): boolean => n.acc !== 0 && WHITE.has(pc(n))
+
+/**
+ * Respells a chord's root and bass in `key`. A root that comes out as C♭, F♭, E♯ or B♯ keeps that name only when the
+ * chord belongs to the key (C♭maj7 is IV in G♭); otherwise a chart would write B7, not C♭7 (Ipanema's bridge in D♭).
+ */
 export function respellInKey<T extends ChordSymbol>(c: T, key: Key): T {
   if (c.kind === 'nc') return c
   const ch = c as Chord
-  return { ...ch, root: spellInKey(pc(ch.root), key), bass: ch.bass && spellInKey(pc(ch.bass), key) } as T
+  let root = spellInKey(pc(ch.root), key)
+  let bass = ch.bass && spellInKey(pc(ch.bass), key)
+  if (awkward(root) && !isDiatonic({ ...ch, root }, key)) root = neutral(pc(root))
+  if (bass && awkward(bass) && !isDiatonic({ ...ch, root }, key)) bass = neutral(pc(bass))
+  return { ...ch, root, bass } as T
 }
 
 /**
@@ -165,18 +176,21 @@ export function finishAnalysis(
   const { regions } = detectKeys(real.map(({ it }) => ({ chord: it.chord, beats: beatCount(it.startMs, it.endMs) })))
   const keyOfItem: Key[] = new Array(items.length)
   const keys: Timeline['keys'] = []
-  for (const r of regions) {
+  const spans = regions.map((r) => {
     const from = r.start === 0 ? 0 : real[r.start]!.i
     const to = r.end === real.length ? items.length : real[r.end]!.i
-    for (let i = from; i < to; i++) keyOfItem[i] = r.key
-    const tonic = conventionalTonic(r.key)
-    keys.push({ startMs: items[from]!.startMs, endMs: items[to - 1]!.endMs, tonic: noteName(tonic), mode: r.key.mode })
+    return { key: r.key, from, to, ms: items[to - 1]!.endMs - items[from]!.startMs }
+  })
+  const side = homeSide(spans)
+  for (const { key: k, from, to } of spans) {
+    for (let i = from; i < to; i++) keyOfItem[i] = k
+    keys.push({ startMs: items[from]!.startMs, endMs: items[to - 1]!.endMs, tonic: noteName(conventionalTonic(k, side)), mode: k.mode })
   }
   const chords: Timeline['chords'] = items.map((it, i) => {
     const k = keyOfItem[i]
     let c = it.chord
     if (k && opts.sevenths && c.kind === 'chord') c = leadSheetSeventh(c, k, items[i + 1]?.chord ?? null)
-    c = k ? respellInKey(c, { ...k, tonic: conventionalTonic(k) }) : c
+    c = k ? respellInKey(c, { ...k, tonic: conventionalTonic(k, side) }) : c
     return {
       startMs: round1(it.startMs),
       endMs: round1(it.endMs),
@@ -218,11 +232,34 @@ export function leadSheetSeventh(c: Chord, key: Key, next: ChordSymbol | null): 
   return c
 }
 
-/** Key names as players write them: D♭ not C♯ major, F♯ minor not G♭ minor, G♭/F♯ major → G♭. */
+/** Key names as players write them: D♭ not C♯ major, F♯ minor not G♭ minor. */
 const MAJOR_TONIC = [0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6]
 const MINOR_TONIC = [0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 6, 6]
-function conventionalTonic(k: Key): Note {
+
+/** Sharps (+) or flats (−) in a key's signature, −5..6 (6 = F♯/G♭ major, D♯/E♭ minor: either way). */
+export function signature(k: Key): number {
+  const majorPc = mod(pc(k.tonic) + (k.mode === 'minor' ? 3 : 0), 12)
+  const f = mod(majorPc * 7, 12)
+  return f > 6 ? f - 12 : f
+}
+
+/** The side of the circle of fifths the song lives on: its longest-held key's signature (0 for C/Am). */
+function homeSide(spans: Array<{ key: Key; ms: number }>): number {
+  const ms = new Map<number, number>()
+  for (const { key, ms: m } of spans) ms.set(signature(key), (ms.get(signature(key)) ?? 0) + m)
+  let best = 0
+  let bestMs = -1
+  for (const [sig, m] of ms) if (m > bestMs) [best, bestMs] = [sig, m]
+  return best === 6 ? -1 : Math.sign(best)
+}
+
+/**
+ * The tonic as a player would name the key. The six-accidental keys take the song's side: F♯ major in a song at home
+ * in B or E (As), G♭ major in one at home in D♭ (`side` = sign of the home signature; flats when unknown).
+ */
+export function conventionalTonic(k: Key, side = -1): Note {
   const p = pc(k.tonic)
+  if (signature(k) === 6) return side > 0 ? spell(k.mode === 'major' ? 3 : 1, p) : spell(k.mode === 'major' ? 4 : 2, p)
   return spell((k.mode === 'major' ? MAJOR_TONIC : MINOR_TONIC)[p]!, p)
 }
 

@@ -5,9 +5,10 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 
 ## Current stage
 
-**M11 done (companion on Linux): `mqc watch` runs on the Ubuntu mini PC as user services (2026-10-21).** Before it, M10 was built
-(Lead sheet view, replacing Solo), approved on screenshots and deployed 2026-10-18; awaiting use on the phone. M8–M10 are live
-(version dca3a8a6). Read `handoffs/DECISIONS.md`, then `handoffs/M11-linux-companion.md`; its Next prompt says what to do.
+**M12 built (jazz-ready charts, 2026-11-01):** the audit's fixes are in the companion and the app (smoothed chords, BTC-PL names,
+vamp-aware keys, iReal charts sent with each analysis and linked by the phone, per-track chord detail); web + Worker deployed.
+Before it, M11 put the companion on the Ubuntu mini PC. Read `handoffs/DECISIONS.md`, then `handoffs/M12-jazz-charts.md`; its
+Open list says how the mini PC gets M12 and the library is re-analysed.
 
 ## Session protocol (keeps context small)
 
@@ -30,10 +31,12 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 - `packages/theory`, `packages/model` — pure TS packages (M2). iReal corpus: `pnpm --filter @mq/theory corpus`
 - `packages/band` — the backing band's arranger, built-in tunes and drills (M6); `apps/web/src/audio` plays it
 - `packages/listen` — live chord decoder, chart alignment, scoring (M7): `pnpm --filter @mq/listen eval --live` on the truth audio
+- `apps/web/scripts/solo-audit.ts` — the soloist audit (M12): `pnpm --filter @mq/web audit pairs.json`
 - `apps/web/src/ui/stand/engrave.ts` + `Score.tsx` — the Lead sheet view (M10): the song engraved on staves; `E2E_SHOTS=1 pnpm e2e` for screenshots
 - `companion/src/mqc/melody.py` — lead melody (M9): htdemucs + CREPE-tiny + Viterbi notes; on no screen for now (P-08)
 - `companion/` — the companion, Python 3.12 + uv (M3): `pnpm companion <cmd>` on Windows, `pnpm companion:linux <cmd>` on Linux
   (`analyse`, `watch`, `queue`, `inbox`, `login`…). It runs on the Ubuntu mini PC as user services (M11, `companion/linux/`)
 - Commands: `pnpm dev`, `pnpm test`, `pnpm e2e` (Playwright WebKit), `pnpm lint`, `pnpm typecheck`, `pnpm ship` (deploy), `pnpm tail` (live device logs)
 - `design/sketchbook.html` — approved design source (published as an artifact; URL in 01-design.md)
+- `research/alternative-approaches.md` — survey of other apps and open-source projects (2026-11-01); not part of the stage protocol
 - `handoffs/` — stage handoffs, decision log, template (see `handoffs/README.md`)

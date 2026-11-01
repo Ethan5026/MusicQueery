@@ -398,6 +398,53 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   the sink config and two user units; `mqc-watch` gets node/pnpm for the theory bridge from the fnm alias `musicqueery`
   (= `.node-version`). `pnpm companion:linux <cmd>` on Linux; `pnpm companion` stays the Windows command.
 
+- **D-86** (M12, user asked for an audit of the charts for jazz soloing, then for every fix it suggested) The stage's yardstick is
+  the soloist audit (`pnpm --filter @mq/web audit pairs.json`, `apps/web/scripts/solo-audit.ts`): per truth beat, root / 3rd / 7th,
+  a wrong 3rd or an unrelated root (< 2 shared tones) as a misleading chord, whether the scale each Play mode shows holds the real
+  chord's root, 3rd and 7th, and whether the steel guide tones are tones of the real chord. MIREX per beat beside it (D-38/D-39).
+  Pop still comes first (D-36): every analysis change is measured on the 7 human-annotated pop songs before the iReal truths.
+  11 truth songs, before → after M12 (pipeline + app, no link): bars with a misleading chord 33.1% → 25.4% (20.5% with D-91's
+  links), Advanced scale lacking a real chord tone 18.0% → 9.3%, Integrated 14.4% → 10.9%, 7ths right 43.7% → 57.3%, Advanced
+  scale changes a minute 30.8 → 12.5.
+- **D-87** (M12, was P-06) Key regions for recordings: a "most-held root is home" prior (each chord adds 1.5 × the share of the
+  song's beats on the key's tonic above 0.15) and Dorian IV in minor / Mixolydian ♭VII in major scored 1.2 instead of borrowed
+  0.6. Charts pass their home key, which turns the prior off. Known keys 18 → 22 of 24 (all 14 analysed recordings right: What Is
+  Hip in E, not A minor; Higher Ground E♭; It's Too Late A minor; Ipanema D♭; Something C); the two misses are near ties on
+  human chords (It's Too Late F 46% / A minor 45%, its chorus is in F). The six-accidental keys take the song's side of the
+  circle (F♯ major inside B, G♭ inside D♭); roots spelled C♭ E♯ F♭ B♯ keep that name only when the chord is diatonic (B7 not
+  C♭7 in E♭ minor). Simple mode now shows a vamp's own tonic scale (27.7% of beats lack a chord tone, was 25.4%); Integrated
+  swaps the chord in, as intended.
+- **D-88** (M12) Scales and coaching: a plain triad takes the key's own mode under Inside and Bebop (`keyMode`: the key's notes
+  rooted on the chord, a missing chord tone swapped for its neighbour: G in C Mixolydian, B♭ in C Lydian, E in A minor Phrygian
+  dominant); 6ths, 7ths and the Colour lens are unchanged. Integrated also swaps in the chord's tensions (`Moment.tensions`:
+  E9's F♯ no longer meets the key's F). A V heard as a plain triad counts in a ii–V only when it lands on its I.
+- **D-89** (M12) Companion chords, `vote_smooth` (default `auto`): a Viterbi over beats on root × major/minor (25 states), each
+  recogniser's weight on what it heard and half of it on the other third of that root; a change costs 0.3 on the downbeat, 0.6
+  on the half bar, 2.0 elsewhere (a plateau in a grid on the truth set). Inside a held state the label may change at the
+  downbeat or half bar, named by the heaviest recogniser that heard that state (BTC's 7th, as in D-34). Walking-bass passing
+  notes stop being one-beat chords: Fly Me 1.72 → 1.26 changes a bar (truth 0.92). `fix_double_time`: ≥ 200 BPM in 8-beat bars
+  is halved (Zanzibar 296 BPM); ≥ 200 BPM in 6-beat bars is a slow 12/8 counted in eighths (dotted-quarter beats, two bars to one).
+- **D-90** (M12, research/alternative-approaches.md ideas 1–3) BTC-PL (ChordMini's distilled BTC student, MIT, arXiv
+  2602.19778) names the chords the vote settles on but has no vote, and may only add maj/min/7/maj7/m7/ø7/°7/6/m6. It is fetched
+  on first use from a pinned commit (2cc7c74) and checked by SHA-256 into `LOCAL/dl/chordmini-btcpl/`, and loaded weights-only.
+  Human pop per beat, M3 vote → D-89 → + BTC-PL names: root .838 → .864 → .864, majmin .840 → .871 → .871, sevenths
+  .677 → .689 → .732, jazz .651 → .672 → .713; iReal truths sevenths .478 → .485 → .544. As a voter in BTC's place it lifted 7ths
+  but cost majmin (.871 → .848), so it only names. htdemucs bass + other stems (idea 2) rejected: human majmin .871 → .847 (they
+  helped only Mas Que Nada's 7ths, .25 → .49). Sections (allin1, idea 3) not tried; P-05 stays open.
+- **D-91** (M12) iReal charts travel with the analysis: Timeline v1 gains optional `charts[]` (≤ 4 Chart v1, no raw string),
+  found by title (`songKey`: "Fly Me To The Moon (In Other Words)" = "Fly Me To The Moon") in iReal's six official lists, which
+  `companion/linux/install.sh` now fetches. The phone links one by itself once per analysis (link `auto`, `for` = createdAt),
+  only from the Jazz, Brazilian, Latin and Blues lists and only when D-68's alignment trusts it, the best by agreement × matched.
+  Pop and Country charts are listed first in the link sheet but never linked by themselves: on the human pop truths a Pop 400
+  link scored below the recognisers (root 85.8 → 83.5; Something 83.9 → 77.1; Just the Way You Are matched its "Page 2" chart).
+  Unlinking stores `none` and sticks. Fly Me's chart now agrees on 61% of beats (53% before D-89); on the iReal truths a link
+  takes bars with a misleading chord from 25.6% to 3.9% (circular: the truth is the chart).
+- **D-92** (M12) Chord detail per track, in the fix-chord sheet: Triads · As heard (default, D-38) · Jazz 7ths (`withChordDetail`:
+  `leadSheetSeventh` in each chord's key; Triads is ChordCue's Simplify). IndexedDB `detail:<id>`; applied before the player's
+  fixes, so a fix always shows as written.
+- **D-93** (M12) `mqc requeue-all [--before DATE] [--dry-run]` queues every stored analysis with `redo` for the watcher. A linked
+  chart numbers bars by their place in its form, so "Bar n of N" takes the largest bar number (was "Bar 15 of 13").
+
 ## Pending
 
 - **P-05** (M3) Sections. Harmony-only segmentation (bar self-similarity of chroma + chord roots) found about half the boundaries
@@ -409,8 +456,6 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   a linked chart's rehearsal marks are the sections for now (D-68). Decide in M8 (Song map).*
   *M8: the Song map uses passes and rehearsal marks where a chart provides them, and 16-bar rows named by time otherwise
   (D-72); automatic sections stay off. Still open, for when the map is used on pop songs.*
-- **P-06** (M3) Key regions: `detectKeys` gives A minor for Fly Me to the Moon (C major) and E♭ major stretches inside
-  Mas Que Nada's F minor (B♭m7–E♭7 bars). Main key right on 3 of 4 truth tracks. Revisit the emission weights with the truth set.
 - **P-08** (M10, user) Loose end: the melody as its own page, analysed from a recording the PC captures (WASAPI loopback or an
   API source), never the phone's mic. The data already exists (D-76, D-77: `melody[]`, `requeue-melody`, `melody-saved`). Off
   every screen until that page is designed.

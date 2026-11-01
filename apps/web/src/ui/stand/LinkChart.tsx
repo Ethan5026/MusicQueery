@@ -1,6 +1,8 @@
 // Link a chart (M7): pick an imported iReal chart (or a built-in tune) for the track; the phone lines it up with the
 // recording (Jump Alignment) and, if it fits, shows its chord names and rehearsal marks from then on. A chart that
 // only fits by rearranging its bars (another song's) is refused with the numbers that refused it.
+// M12: charts that came with the analysis (iReal charts of the same title, found by the PC) are listed first, and the
+// phone may already have linked one by itself; unlinking stops that for this track.
 import type { AlignResult } from '@mq/listen'
 import { useEffect, useMemo, useState } from 'react'
 import { type ChartEntry, TUNES, chartIndex } from '../../audio/library'
@@ -24,19 +26,26 @@ interface Option {
 export function LinkChart({ title }: { title: string }) {
   const close = () => useStandUi.getState().setLinking(false)
   const linked = useSession((s) => s.linked)
+  const sent = useSession((s) => s.timeline?.charts)
   const [index, setIndex] = useState<ChartEntry[] | null>(null)
   const [q, setQ] = useState(() => cleanTitle(title))
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<{ title: string; r: AlignResult | null } | null>(null)
   useEffect(() => void chartIndex().then(setIndex), [])
   const options = useMemo<Option[]>(() => {
+    const withSong: Option[] = (sent ?? []).map((c) => ({
+      ref: `tl:${c.id}`,
+      title: c.title,
+      sub: ['Came with the analysis', c.source?.playlist].filter(Boolean).join(' · '),
+    }))
     const all: Option[] = [
       ...(index ?? []).map((e) => ({ ref: e.id, title: e.title, sub: [e.composer, e.playlist].filter(Boolean).join(' · ') })),
       ...TUNES.map((t) => ({ ref: `tune:${t.id}`, title: t.title, sub: 'Built-in tune' })),
     ]
     const words = q.toLowerCase().split(/\s+/).filter(Boolean)
-    return words.length ? all.filter((o) => words.every((w) => o.title.toLowerCase().includes(w))).slice(0, 8) : []
-  }, [index, q])
+    const found = words.length ? all.filter((o) => words.every((w) => o.title.toLowerCase().includes(w))) : []
+    return [...withSong, ...found].slice(0, 8)
+  }, [index, q, sent])
 
   const pick = async (o: Option) => {
     setBusy(o.ref)
@@ -56,12 +65,15 @@ export function LinkChart({ title }: { title: string }) {
           </button>
         </div>
         <p className="cal-p">
-          The chart’s chord names replace the heard ones wherever it lines up with the recording. Charts come from your iReal
-          Pro imports (Tracks → Generated).
+          The chart’s chord names replace the heard ones wherever it lines up with the recording. Charts come with the
+          analysis (iReal Pro’s lists, matched by title; jazz ones link by themselves) or from your iReal Pro imports
+          (Tracks → Generated).
         </p>
         {linked && (
           <div className="cal-res">
-            <span>Linked: {linked.link.title}</span>
+            <span>
+              {linked.link.auto ? 'Linked automatically' : 'Linked'}: {linked.link.title}
+            </span>
             <button type="button" className="btn" onClick={() => void linkChart(null).then(close)}>
               Unlink
             </button>

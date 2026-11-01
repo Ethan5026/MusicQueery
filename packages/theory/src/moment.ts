@@ -6,11 +6,13 @@ import {
   type ChordSymbol,
   NC,
   type Slot,
+  chordNotes,
   chordTones,
   formatChord,
   formatQuality,
   parseChord,
 } from './chord'
+import { leadSheetSeventh } from './analysed'
 import { type TwoFive, findTwoFives, guideTones } from './guide'
 import { type InstrumentId, INSTRUMENTS, chordToWritten, toWritten } from './instrument'
 import { type HarmonicFunction, type Key, harmonicFunction, majorDegree, sameKey } from './numeral'
@@ -164,6 +166,8 @@ export interface Moment {
   scale: MomentScale | null
   scales: Record<Lens, MomentScale> | null
   tones: Array<{ name: string; slot: Slot; degree: string }>
+  /** the chord's tensions (9ths, 11ths, 13ths, alterations) in written pitch, e.g. F♯ for E9 */
+  tensions: string[]
   guide: Array<{ from: string; fromSlot: '3' | '7'; to: string; toSlot: '3' | '7'; semis: number }> | null
   /** first ii–V(–I) starting within the next 8 chords */
   twoFive: (Omit<TwoFive, 'target' | 'line'> & { target: string; line: string[] }) | null
@@ -242,7 +246,7 @@ export function moment(tl: Timeline, positionMs: number, prefs: Prefs): Moment {
     next,
   }
   if (!cur) {
-    return { ...base, chord: null, fn: null, key: null, keyChange: null, scale: null, scales: null, tones: [], guide: null, twoFive: null }
+    return { ...base, chord: null, fn: null, key: null, keyChange: null, scale: null, scales: null, tones: [], tensions: [], guide: null, twoFive: null }
   }
 
   let keyChange: Moment['keyChange'] = null
@@ -262,11 +266,16 @@ export function moment(tl: Timeline, positionMs: number, prefs: Prefs): Moment {
   const nextChord = ev[i + 1]?.chord ?? null
   let scales: Record<Lens, MomentScale> | null = null
   let tones: Moment['tones'] = []
+  let tensions: string[] = []
   let guide: Moment['guide'] = null
   if (cur.chord.kind === 'chord') {
     const c = cur.chord
     scales = Object.fromEntries(LENSES.map((l) => [l, scaleFor(c, cur.key, nextChord, l, inst)])) as Record<Lens, MomentScale>
-    tones = chordTones(chordToWritten(c, inst)).map((t) => ({ name: noteName(t.note), slot: t.slot, degree: t.degree }))
+    const w = chordToWritten(c, inst)
+    tones = chordTones(w).map((t) => ({ name: noteName(t.note), slot: t.slot, degree: t.degree }))
+    tensions = chordNotes(w)
+      .slice(tones.length)
+      .map((n) => noteName(n.note))
     if (nextChord?.kind === 'chord') {
       const g = guideTones(chordToWritten(c, inst), chordToWritten(nextChord, inst))
       guide = g ? g.map((m) => ({ from: noteName(m.from), fromSlot: m.fromSlot, to: noteName(m.to), toSlot: m.toSlot, semis: m.semis })) : null
@@ -287,7 +296,37 @@ export function moment(tl: Timeline, positionMs: number, prefs: Prefs): Moment {
     scale: scales ? scales[prefs.lens] : null,
     scales,
     tones,
+    tensions,
     guide,
     twoFive,
   }
+}
+
+// ---------------------------------------------------------------- chord detail (M12)
+
+/** How much of each chord to show: plain triads, as heard (or charted), or the 7ths a jazz lead sheet would write. */
+export type ChordDetail = 'triads' | 'heard' | 'lead'
+
+/** A triad keeps its root, 3rd (or sus) and 5th; slash bass and tensions go. */
+function toTriad(c: Chord): Chord {
+  return { ...c, seventh: 'none', tensions: [], alt: false, add3: false, bass: null }
+}
+
+/**
+ * The timeline with its chords at `detail` (Settings → per-track chord detail): `lead` writes each triad as the 7th
+ * chord a jazz lead sheet would in its key (`leadSheetSeventh`: G → G7 on V, C → Cmaj7 on I, Am → Am7); `triads`
+ * strips 7ths and tensions (ChordCue's Simplify). Keys and timing stay. `heard` returns `tl` itself.
+ */
+export function withChordDetail(tl: Timeline, detail: ChordDetail): Timeline {
+  if (detail === 'heard') return tl
+  const a = analyseTimeline(tl)
+  const byStart = new Map(a.events.map((e) => [e.startMs, e]))
+  const chords = effectiveChords(tl).map((span) => {
+    const e = byStart.get(span.startMs)
+    if (!e || e.chord.kind !== 'chord') return span
+    const next = a.events[e.index + 1]?.chord ?? null
+    const c = detail === 'lead' ? leadSheetSeventh(e.chord, e.key, next) : toTriad(e.chord)
+    return { ...span, symbol: formatChord(c) }
+  })
+  return { ...tl, chords, edits: [] }
 }

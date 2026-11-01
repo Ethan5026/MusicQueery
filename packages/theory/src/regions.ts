@@ -14,10 +14,20 @@ export interface RegionOptions {
   home?: Key
   /** The sequence loops (a form played again): the last chord's next is the first */
   cyclic?: boolean
+  /**
+   * Weight of the "most-held root is home" prior (M12): every chord adds this × the share of the song's beats whose
+   * chord has the key's tonic as root. It settles vamps (an E9 groove is in E, not V7 of A minor; Am7–D is A minor,
+   * not ii–V in G). Default TONIC_PRIOR for recordings; 0 when `home` is given (charts know their key).
+   */
+  tonicPrior?: number
 }
 
 const CHANGE_PENALTY = 4
 const HOME_PRIOR = 1
+export const TONIC_PRIOR = 1.5
+/** A root has to hold more than this share of the song before it counts as home (Giant Steps' even thirds don't). */
+const TONIC_FLOOR = 0.15
+const MODAL = 1.2
 
 const MAJOR_NAMES = [0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6] // C D♭ D E♭ E F G♭ G A♭ A B♭ B
 const MINOR_NAMES = [0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 6, 6] // C C♯ D E♭ E F F♯ G G♯ A B♭ B
@@ -58,6 +68,9 @@ function emission(fn: HarmonicFunction, c: ChordSymbol, prev: ChordSymbol | null
     case 'blues':
       return d === 0 ? 2.2 : 1.8
     case 'borrowed':
+      // modal staples (M12): Dorian IV in minor (Am7–D, So What), Mixolydian ♭VII in major (D–C–G)
+      if (k.mode === 'minor' && d === 5 && (f === 'maj' || f === 'dom')) return MODAL
+      if (k.mode === 'major' && d === 10 && (f === 'maj' || f === 'dom')) return MODAL
       return 0.6
     default:
       return -1
@@ -80,6 +93,8 @@ export function detectKeys(items: RegionInput[], opts: RegionOptions = {}): { ke
   const at = (i: number): ChordSymbol | null =>
     i >= 0 && i < n ? items[i]!.chord : opts.cyclic ? items[mod(i, n)]!.chord : null
   const keys = ALL_KEYS.map(keyOf)
+  const prior = opts.tonicPrior ?? (opts.home ? 0 : TONIC_PRIOR)
+  const share = rootShare(items)
   const score: Float64Array[] = []
   const back: Int16Array[] = []
   for (let i = 0; i < n; i++) {
@@ -87,7 +102,8 @@ export function detectKeys(items: RegionInput[], opts: RegionOptions = {}): { ke
     const em = new Float64Array(K)
     for (let k = 0; k < K; k++) {
       const fn = harmonicFunction(at(i - 1), c, at(i + 1), keys[k]!, at(i + 2))
-      em[k] = emission(fn, c, at(i - 1), at(i + 1), keys[k]!) * weight(items[i]!.beats)
+      const tonicBonus = c.kind === 'chord' ? prior * Math.max(0, share[ALL_KEYS[k]!.tonicPc]! - TONIC_FLOOR) : 0
+      em[k] = (emission(fn, c, at(i - 1), at(i + 1), keys[k]!) + tonicBonus) * weight(items[i]!.beats)
     }
     const s = new Float64Array(K)
     const b = new Int16Array(K)
@@ -131,6 +147,18 @@ export function detectKeys(items: RegionInput[], opts: RegionOptions = {}): { ke
   const out: Key[] = []
   for (const r of regions) for (let i = r.start; i < r.end; i++) out.push(r.key)
   return { keys: out, regions }
+}
+
+/** Share of the chorded beats on each root pitch class. */
+function rootShare(items: RegionInput[]): number[] {
+  const s = new Array<number>(12).fill(0)
+  let total = 0
+  for (const { chord, beats } of items) {
+    if (chord.kind !== 'chord') continue
+    s[pc(chord.root)]! += beats
+    total += beats
+  }
+  return total ? s.map((x) => x / total) : s
 }
 
 /** Uses the chart's own spelling of the tonic when a chord in the region has that root. */

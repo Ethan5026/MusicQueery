@@ -24,6 +24,14 @@ from .config import LOCAL
 Segments = list[tuple[float, float, str]]
 VAMP_DIR = LOCAL / "vamp"
 BTC_DIR = LOCAL / "dl" / "BTC-ISMIR19-master"
+# BTC-PL (M12): ChordMini's BTC student, distilled from BTC on pseudo-labelled audio (Phan et al., arXiv 2602.19778;
+# github.com/ptnghia-j/ChordMini, MIT). It names the chords the vote settles on. Pinned by commit and SHA-256.
+BTCPL_URL = (
+    "https://raw.githubusercontent.com/ptnghia-j/ChordMini/2cc7c740e3b5ea2e0b74bbd314b1c1583e4193d8/"
+    "checkpoints/btc_model_best.pth"
+)
+BTCPL_SHA256 = "e0a12ca6d881f81e01dfb459b4836ec7dac8d8f87b0170a412b5807256b3a1fc"
+BTCPL_PATH = LOCAL / "dl" / "chordmini-btcpl" / "btc_model_best.pth"
 
 
 def resample(audio: np.ndarray, sr: int, to: int) -> np.ndarray:
@@ -49,7 +57,7 @@ def _beat_model():
 def track_beats(audio: np.ndarray, sr: int, regular: bool = True) -> Beats:
     beats, downbeats = _beat_model()(audio, sr)
     b = Beats(np.asarray(beats, dtype=float), np.asarray(downbeats, dtype=float))
-    return regularise(b) if regular else b
+    return fix_double_time(regularise(b)) if regular else b
 
 
 def regularise(b: Beats, glitch: float = 0.6) -> Beats:
@@ -82,6 +90,33 @@ def regularise(b: Beats, glitch: float = 0.6) -> Beats:
         else:
             out += list(b.beats[(b.beats >= a - 0.03) & (b.beats < e - 0.03)])
     return Beats(np.array(sorted(out)), dbs)
+
+
+FAST_BPM = 200.0  # above this a beat grid in 8- or 6-beat bars is counting eighth notes
+
+
+def fix_double_time(b: Beats, fast_bpm: float = FAST_BPM) -> Beats:
+    """Halves a beat grid counted in eighth notes (M12). Bars of 8 beats at a fast tempo become 4 (Zanzibar came out
+    at 296 BPM in 8-beat bars); bars of 6 at a fast tempo are a slow 12/8 counted in eighths (RAYE's Man's World at
+    250 BPM), so every third beat is kept and two of those bars make one 4-beat bar. Other grids are left alone."""
+    if len(b.beats) < 16 or len(b.downbeats) < 4:
+        return b
+    if 60 / float(np.median(np.diff(b.beats))) < fast_bpm:
+        return b
+    idx = np.searchsorted(b.beats, b.downbeats - 1e-3)
+    n = Counter(int(k) for k in np.diff(idx)).most_common(1)[0][0]
+    if n == 8:
+        step, pair = 2, False
+    elif n == 6:
+        step, pair = 3, True
+    else:
+        return b
+    keep = list(range(int(idx[0]) % step, int(idx[0]), step))  # a pickup keeps the same phase
+    for k, start in enumerate(idx):
+        stop = int(idx[k + 1]) if k + 1 < len(idx) else len(b.beats)
+        keep += range(int(start), stop, step)
+    downs = b.downbeats[::2] if pair else b.downbeats
+    return Beats(b.beats[sorted(set(keep))], downs)
 
 
 def meter_of(b: Beats) -> int:
@@ -138,7 +173,7 @@ def chords_madmom(audio: np.ndarray, sr: int, model: str = "deepchroma") -> Segm
 
 
 @cache
-def _btc():
+def _btc(checkpoint: str | None = None):
     import torch
     import yaml
 
@@ -153,11 +188,45 @@ def _btc():
     cfg = HParams(**yaml.safe_load((BTC_DIR / "run_config.yaml").read_text()))
     cfg.feature["large_voca"] = True
     cfg.model["num_chords"] = 170
-    ckpt = torch.load(BTC_DIR / "test" / "btc_model_large_voca.pt", map_location="cpu", weights_only=False)
+    path = checkpoint or BTC_DIR / "test" / "btc_model_large_voca.pt"
+    # the stock checkpoint pickles numpy arrays; anything else is loaded as plain tensors only
+    ckpt = torch.load(path, map_location="cpu", weights_only=checkpoint is not None)
     model = BTC_model(config=cfg.model)
-    model.load_state_dict(ckpt["model"])
+    state = ckpt.get("model") or ckpt.get("model_state_dict") or ckpt.get("state_dict") or ckpt
+    model.load_state_dict(state)
     model.eval()
-    return model, cfg, ckpt["mean"], ckpt["std"]
+    norm = ckpt.get("normalization") or {}  # ChordMini's checkpoints (BTC-PL) keep their own scalar mean/std
+    mean, std = ckpt.get("mean", norm.get("mean")), ckpt.get("std", norm.get("std"))
+    if hasattr(mean, "item"):
+        mean, std = float(mean), float(std)
+    if mean is None:  # students trained on the same features keep the teacher's normalisation
+        stock = torch.load(BTC_DIR / "test" / "btc_model_large_voca.pt", map_location="cpu", weights_only=False)
+        mean, std = stock["mean"], stock["std"]
+    return model, cfg, mean, std
+
+
+def btcpl_checkpoint(log=print) -> str | None:
+    """The BTC-PL checkpoint, downloaded once and checked against its SHA-256; None when it can't be had (the vote then
+    names chords as before). Loaded as plain tensors only (`_btc`), never unpickled code."""
+    import hashlib
+    import urllib.request
+
+    if BTCPL_PATH.exists():
+        return str(BTCPL_PATH)
+    try:
+        BTCPL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        data = urllib.request.urlopen(BTCPL_URL, timeout=120).read()  # noqa: S310  a pinned https URL
+        if hashlib.sha256(data).hexdigest() != BTCPL_SHA256:
+            log("  BTC-PL download does not match its checksum; naming chords without it")
+            return None
+        tmp = BTCPL_PATH.with_suffix(".part")
+        tmp.write_bytes(data)
+        tmp.replace(BTCPL_PATH)
+        log(f"  fetched BTC-PL ({len(data) // 1_000_000} MB)")
+        return str(BTCPL_PATH)
+    except Exception as e:  # noqa: BLE001  the namer is optional
+        log(f"  BTC-PL unavailable ({e}); naming chords without it")
+        return None
 
 
 BTC_QUALITIES = [
@@ -187,12 +256,12 @@ def _btc_label(i: int) -> str:
     return f"{BTC_ROOTS[i // 14]}:{BTC_QUALITIES[i % 14]}"
 
 
-def chords_btc(audio: np.ndarray, sr: int) -> Segments:
+def chords_btc(audio: np.ndarray, sr: int, checkpoint: str | None = None) -> Segments:
     """BTC large-vocabulary transformer (Park et al., ISMIR 2019), same features as its test.py."""
     import librosa
     import torch
 
-    model, cfg, mean, std = _btc()
+    model, cfg, mean, std = _btc(checkpoint)
     hz = cfg.mp3["song_hz"]
     a = resample(audio, sr, hz)
     inst = int(hz * cfg.mp3["inst_len"])
@@ -291,6 +360,136 @@ def vote(
     return beat_sync(out, beats, end_s)
 
 
+# M12: what a chord change costs by where it falls in the bar (on the downbeat, the half bar, or another beat).
+SMOOTH_PENALTY = {"down": 0.3, "half": 0.6, "off": 2.0}  # a plateau on the truth set (M12 grid)
+
+
+def _label_at(segs: Segments, idx: int, m: float) -> tuple[int, str]:
+    while idx < len(segs) and segs[idx][1] <= m:
+        idx += 1
+    return idx, segs[idx][2] if idx < len(segs) and segs[idx][0] <= m else "N"
+
+
+MINORISH = {"min", "min7", "min6", "minmaj7", "hdim7", "dim", "dim7", "min9", "min11", "min13"}
+
+
+# what a namer may add on top of the vote: 7ths and 6ths (its sus, aug and dim drop the 3rd the vote settled on)
+NAMER_QUALITIES = {"maj", "min", "7", "maj7", "min7", "hdim7", "dim7", "min6", "maj6"}
+
+
+def _quality(label: str) -> str:
+    return label.split(":")[1].split("/")[0].split("(")[0] if ":" in label else ("N" if label in ("N", "X") else "maj")
+
+
+def _state_of(label: str) -> int:
+    """0..23 = root × (major-ish, minor-ish); 24 = no chord."""
+    if label in ("N", "X"):
+        return 24
+    q = label.split(":")[1].split("/")[0].split("(")[0] if ":" in label else "maj"
+    return int(_root(label)) * 2 + (q in MINORISH)  # type: ignore[operator]
+
+
+def vote_smooth(
+    per: dict[str, Segments],
+    beats: Beats,
+    end_s: float,
+    weights: dict[str, float] = VOTE_WEIGHTS,
+    down: float = SMOOTH_PENALTY["down"],
+    half: float = SMOOTH_PENALTY["half"],
+    off: float = SMOOTH_PENALTY["off"],
+    root_share: float = 0.5,
+    namers: dict[str, Segments] | None = None,
+) -> Segments:
+    """The vote with a sense of harmonic rhythm (M12). A Viterbi over beats picks root and major/minor: each
+    recogniser adds its weight to the state it heard and `root_share` of it to the other third on the same root, and
+    every change of state pays a penalty by its place in the bar, cheap on the downbeat, dearer on the half bar,
+    dearest on the other beats, so a walking bass's passing notes stop turning into one-beat chords. Within a held
+    state the label (7th, 6th, sus…) may still change, but only at the downbeat or the half bar, each half bar taking
+    the label the recognisers gave it most (weighted): Dm7 | Dm | Dm7 reads Dm7, C Cmaj7 C7 keeps its line.
+    `namers` are consulted first for that label but have no vote."""
+    bt = beats.beats
+    synced = {r: beat_sync(per[r], bt, end_s) for r in weights}
+    extra = {r: beat_sync(sg, bt, end_s) for r, sg in (namers or {}).items()}
+    edges = np.concatenate([[0.0], bt, [end_s]]) if bt[0] > 0.05 else np.concatenate([bt, [end_s]])
+    n = len(edges) - 1
+    bar_start = np.searchsorted(beats.downbeats, edges[:-1] + 1e-3, side="right") - 1
+    pos = np.zeros(n, dtype=int)
+    per_bar: Counter[int] = Counter()
+    for i in range(n):
+        if i and bar_start[i] == bar_start[i - 1]:
+            pos[i] = pos[i - 1] + 1
+        per_bar[int(bar_start[i])] += 1
+    S = 25
+    em = np.zeros((n, S))
+    labels: list[list[tuple[str, float]]] = []
+    idx = dict.fromkeys(weights, 0)
+    order = [*extra, *sorted(weights, key=lambda r: -weights[r])]
+    idx.update(dict.fromkeys(extra, 0))
+    for i, (a, b) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+        m = (a + b) / 2
+        here = []
+        for r in order:
+            idx[r], lab = _label_at(extra[r] if r in extra else synced[r], idx[r], m)
+            w = weights.get(r, 0.0)
+            st = _state_of(lab)
+            em[i, st] += w
+            if st < 24:
+                em[i, st ^ 1] += root_share * w
+            here.append((lab, w))
+        labels.append(here)
+    # a cut point is the downbeat or the half bar (even meters)
+    size = np.array([per_bar[int(bar_start[i])] for i in range(n)])
+    cut = (pos == 0) | ((size % 2 == 0) & (pos == size // 2))
+    cost = np.where(pos == 0, down, np.where(cut, half, off))
+    score = em[0].copy()
+    back = np.zeros((n, S), dtype=int)
+    for i in range(1, n):
+        best = int(np.argmax(score))
+        move = score[best] - cost[i]
+        choose = move > score
+        back[i] = np.where(choose, best, np.arange(S))
+        score = np.where(choose, move, score) + em[i]
+    path = np.zeros(n, dtype=int)
+    path[-1] = int(np.argmax(score))
+    for i in range(n - 1, 0, -1):
+        path[i - 1] = back[i, path[i]]
+    out: Segments = []
+
+    def emit(a: int, b: int, st: int) -> None:
+        # as in `vote`, the heaviest recogniser that heard this state names it (BTC's vocabulary supplies the 7th)
+        lab = "N" if st == 24 else f"{BTC_ROOTS[st // 2]}:{'min' if st % 2 else 'maj'}"
+        if st < 24:
+            for r in order:
+                j = order.index(r)
+                ok = (lambda lab: _quality(lab) in NAMER_QUALITIES) if r in extra else (lambda lab: True)
+                said = Counter(
+                    labels[k][j][0].split("/")[0]
+                    for k in range(a, b)
+                    if _state_of(labels[k][j][0]) == st and ok(labels[k][j][0])
+                )
+                if said:
+                    lab = said.most_common(1)[0][0]
+                    break
+        if out and out[-1][2] == lab and abs(out[-1][1] - edges[a]) < 1e-9:
+            out[-1] = (out[-1][0], float(edges[b]), lab)
+        else:
+            out.append((float(edges[a]), float(edges[b]), lab))
+
+    i = 0
+    while i < n:
+        j = i + 1
+        while j < n and path[j] == path[i]:
+            j += 1
+        # the label may change inside a held state, at cut points only
+        a = i
+        for k in range(i + 1, j + 1):
+            if k == j or cut[k]:
+                emit(a, k, int(path[i]))
+                a = k
+        i = j
+    return out
+
+
 @dataclass
 class Chords:
     segs: Segments  # beat-synced
@@ -301,16 +500,21 @@ class Chords:
 
 
 def recognise(audio: np.ndarray, sr: int, beats: Beats, recogniser: str = "auto") -> Chords:
-    """`auto` (default): 3-way vote as heard, no added sevenths (D-38). `auto+7ths`: the vote with lead-sheet sevenths
-    when BTC hears enough 7ths (the M3 gate, D-34; hurt human-annotated pop, kept for jazz experiments).
-    Any single recogniser name: that one alone."""
+    """`auto` (default): 3-way vote as heard, smoothed by harmonic rhythm (M12, `vote_smooth`), no added sevenths
+    (D-38; the phone writes lead-sheet 7ths per track when asked). `auto+7ths`: that with lead-sheet sevenths when BTC
+    hears enough 7ths (the M3 gate, D-34). `vote`: the M3 per-beat vote, unsmoothed. Any recogniser name: that one."""
     end = len(audio) / sr
-    if recogniser not in ("auto", "auto+7ths"):
+    if recogniser not in ("auto", "auto+7ths", "vote"):
         return Chords(beat_sync(RECOGNISERS[recogniser](audio, sr), beats.beats, end), False, 0.0, recogniser)
     per = {r: RECOGNISERS[r](audio, sr) for r in VOTE_WEIGHTS}
     share = seventh_share(per["btc"])
+    if recogniser == "vote":
+        return Chords(vote(per, beats.beats, end), False, share, "vote", per)
     jazz = recogniser == "auto+7ths" and share >= JAZZ_SEVENTH_SHARE
-    return Chords(vote(per, beats.beats, end), jazz, share, "vote+7ths" if jazz else "vote", per)
+    ckpt = btcpl_checkpoint()
+    namers = {"btcpl": chords_btc(audio, sr, checkpoint=ckpt)} if ckpt else None
+    name = "vote+smooth" + ("+pl" if namers else "") + ("+7ths" if jazz else "")
+    return Chords(vote_smooth(per, beats, end, namers=namers), jazz, share, name, per)
 
 
 # ---------------------------------------------------------------- beat sync + timeline

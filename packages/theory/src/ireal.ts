@@ -468,3 +468,20 @@ export function importPlaylist(text: string): { name?: string; results: ImportRe
   const pl = parsePlaylist(text)
   return { ...(pl.name ? { name: pl.name } : {}), results: pl.songs.map((s) => songToChart(s, pl.name)) }
 }
+
+/**
+ * A song title reduced for matching across sources (M12): Spotify's "Let It Be - Remastered 2009" and "Fly Me To The
+ * Moon (In Other Words)" meet iReal's "Let It Be" and "Fly Me To The Moon"; "Girl From Ipanema, The" meets "The Girl
+ * From Ipanema".
+ */
+export function songKey(title: string): string {
+  return title
+    .replace(/\s+-\s+.*$/, '')
+    .replace(/\(.*?\)|\[.*?\]/g, ' ')
+    .replace(/^(.*), (the|a|an)$/i, '$2 $1')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/^(the|a|an) /, '')
+}

@@ -114,3 +114,43 @@ def test_seventh_share_and_vote():
     }
     # beats 0-1: C wins (btc+chordino) and keeps BTC's quality; beats 2-3: G wins (chordino+madmom) over E
     assert A.vote(per, beats, 4.0) == [(0.0, 2.0, "C:maj7"), (2.0, 4.0, "G:maj")]
+
+
+def test_vote_smooth_holds_through_a_walking_bass():
+    # 4/4 at 2 s a bar. Bar 1 is Dm7, but on beat 2 the bass walks to F and two recognisers follow it for one beat;
+    # bar 2 is G7. The plain vote flickers to F; the smoothed vote holds Dm7 and still changes on the downbeat.
+    beats = A.Beats(np.arange(0, 4, 0.5), np.array([0.0, 2.0]))
+    per = {
+        "btc": [(0, 2, "D:min7"), (2, 4, "G:7")],
+        "chordino": [(0, 0.5, "D:min"), (0.5, 1.0, "F:maj"), (1.0, 2, "D:min"), (2, 4, "G:maj")],
+        "madmom": [(0, 0.5, "D:min"), (0.5, 1.0, "F:maj"), (1.0, 2, "D:min"), (2, 4, "G:maj")],
+    }
+    assert any(lab == "F:maj" for _, _, lab in A.vote(per, beats.beats, 4.0))
+    assert A.vote_smooth(per, beats, 4.0) == [(0.0, 2.0, "D:min7"), (2.0, 4.0, "G:7")]
+
+
+def test_vote_smooth_keeps_changes_on_the_half_bar():
+    # Gmaj7 for two beats, Gm7 for two (Just the Way You Are): the third changes on the half bar and is kept
+    beats = A.Beats(np.arange(0, 2, 0.5), np.array([0.0]))
+    per = {
+        "btc": [(0, 1, "G:maj7"), (1, 2, "G:min7")],
+        "chordino": [(0, 1, "G:maj"), (1, 2, "G:min")],
+        "madmom": [(0, 1, "G:maj"), (1, 2, "G:min")],
+    }
+    assert A.vote_smooth(per, beats, 2.0) == [(0.0, 1.0, "G:maj7"), (1.0, 2.0, "G:min7")]
+
+
+def test_fix_double_time():
+    # 8 beats a bar at 300 BPM (Zanzibar) → 4 beats a bar at 150 BPM
+    step = 0.2
+    b = A.Beats(np.arange(0, 32 * step, step), np.arange(0, 32 * step, 8 * step))
+    f = A.fix_double_time(b)
+    assert len(f.beats) == 16 and np.allclose(np.diff(f.beats), 0.4) and len(f.downbeats) == 4
+    # 6 eighths a bar at 250 BPM (a slow 12/8) → dotted-quarter beats, 4 to a bar
+    step = 0.24
+    b = A.Beats(np.arange(0, 48 * step, step), np.arange(0, 48 * step, 6 * step))
+    f = A.fix_double_time(b)
+    assert np.allclose(np.diff(f.beats), 0.72) and len(f.downbeats) == 4 and A.meter_of(f) == 4
+    # 4/4 at a real fast tempo stays
+    b = A.Beats(np.arange(0, 32 * 0.25, 0.25), np.arange(0, 32 * 0.25, 1.0))
+    assert A.fix_double_time(b) is b

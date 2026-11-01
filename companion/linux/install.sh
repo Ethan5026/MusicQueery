@@ -26,6 +26,10 @@ NODE_BIN="$HOME/.local/share/fnm/aliases/musicqueery/bin"
 [ -x "$NODE_BIN/pnpm" ] || PATH="$NODE_BIN:$PATH" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 "$NODE_BIN/corepack" enable
 PATH="$NODE_BIN:$PATH" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 "$NODE_BIN/pnpm" install --frozen-lockfile
 
+echo "== iReal Pro playlists (M12: charts titled like each analysed track travel with its timeline)"
+[ -f packages/theory/corpus/jazz1460.txt ] || PATH="$NODE_BIN:$PATH" "$NODE_BIN/pnpm" --filter @mq/theory corpus
+PATH="$NODE_BIN:$PATH" "$NODE_BIN/pnpm" --filter @mq/theory bridge
+
 echo "== uv + Python 3.12"
 [ -x "$UV" ] || curl -LsSf https://astral.sh/uv/install.sh | sh
 "$UV" python install 3.12

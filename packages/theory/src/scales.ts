@@ -61,9 +61,51 @@ const nextIsMinor = (next: Chord | null): boolean => {
   return f === 'min' || f === 'half'
 }
 
+const MAJOR_SEMIS = SCALES.major.semis
+const SEVEN_NOTE = (Object.keys(SCALES) as ScaleId[]).filter((id) => SCALES[id].semis.length === 7)
+
+/**
+ * The key's own notes rooted on the chord, with any chord tone the key lacks swapped in for its neighbour (M12): what
+ * a player keeps playing over a plain triad. G in C → Mixolydian, F in C → Lydian, B♭ in C → Lydian, D in A minor →
+ * Mixolydian (Dorian IV), E in A minor → Phrygian dominant. Null when no listed scale matches.
+ */
+export function keyMode(c: Chord, degree: number): ScaleId | null {
+  const root = pc(c.root)
+  const tonic = mod(root - degree, 12)
+  const req = requiredPcs(c, true).map((x) => mod(root + x, 12))
+  // each missing chord tone replaces the key note a semitone below or above it; the first way that spells a
+  // listed scale wins (B♭ in C replaces B, not A)
+  const tries = (set: Set<number>, missing: number[]): ScaleId | null => {
+    if (!missing.length) {
+      const iv = [...set].map((p) => mod(p - root, 12)).sort((a, b) => a - b).join(',')
+      return SEVEN_NOTE.find((id) => SCALES[id].semis.join(',') === iv) ?? null
+    }
+    const [p, ...rest] = missing as [number, ...number[]]
+    for (const n of [mod(p + 1, 12), mod(p - 1, 12)]) {
+      if (!set.has(n) || req.includes(n)) continue
+      const next = new Set(set)
+      next.delete(n)
+      next.add(p)
+      const hit = tries(next, rest)
+      if (hit) return hit
+    }
+    return null
+  }
+  const key = new Set(MAJOR_SEMIS.map((x) => mod(tonic + x, 12)))
+  return tries(key, req.filter((p) => !key.has(p)))
+}
+
+const BEBOP_OF: Partial<Record<ScaleId, ScaleId>> = { major: 'bebopMaj', mixolydian: 'bebopDom', dorian: 'bebopDor' }
+
 function candidates(c: Chord, ctx: ScaleContext, lens: Lens): ScaleId[] {
   const f = family(c)
   const d = mod(ctx.degree, 12)
+  // a plain triad says nothing about the 7th: the key decides it (pop's V is a triad far more often than a written
+  // V7, and Ionian over it clashes with the key's own 4th)
+  if (lens !== 'colour' && (f === 'maj' || f === 'min') && c.seventh === 'none' && !c.alt && c.fifth === 'p') {
+    const km = keyMode(c, d)
+    if (km) return lens === 'bebop' ? [BEBOP_OF[km] ?? km, km] : [km]
+  }
   const nm = nextIsMinor(ctx.next)
   const insideMaj: ScaleId[] =
     c.fifth === '#' ? ['lydaug'] : c.seventh === 'none' ? ['major', 'lydian'] : d === 5 ? ['lydian', 'major'] : ['major', 'lydian']
