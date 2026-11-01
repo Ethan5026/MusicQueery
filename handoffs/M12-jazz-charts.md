@@ -1,6 +1,6 @@
 # M12 · Jazz-ready charts (audit fixes)
 
-**Status:** built, tested, pushed; deploy (`pnpm ship`) waiting on the user · 2026-11-01 · **Next:** deploy, mini PC update, library re-analysis
+**Status:** built, tested, pushed, deployed (Worker version 779c97fc) · 2026-11-01 · **Next:** mini PC update, library re-analysis
 **Commit:** see `git log` for "S12|M12:" (pushed to origin/main)
 
 ## Goal of this stage
@@ -49,13 +49,13 @@ whole library re-analysed on the mini PC. Pop must not get worse (D-36).
   Nature as heard vs Jazz 7ths (landscape chart, alto lead sheet)
 
 ## Open
-- [ ] user: `pnpm ship` (web + Worker), so the phone links charts and shows the chord-detail switch. The Worker stores timelines
-      as sent, so `charts[]` survive either way and the order of deploy and re-analysis doesn't matter. The session's deploy
-      was refused by the auto-mode safety check
+- [x] `pnpm ship` done 2026-11-01 (Worker version 779c97fc). On this laptop pnpm's cmd shell needs node first on PATH:
+      `PATH="/c/nvm4w/nodejs:$PATH" pnpm ship`
 - [ ] user/next: the mini PC must run this code before the re-analysis: `git pull`, `bash companion/linux/install.sh`
       (fetches the iReal corpus, rebuilds the bridge), `systemctl --user restart mqc-watch`; then
       `pnpm companion:linux requeue-all --before 2026-11-02` (33 tracks; each is played in full, ~4–6 h when Spotify is idle).
-      Not done this session: SSH to gruman@192.168.40.46 refused the project key
+      Not done yet: the mini PC takes password logins only (BatchMode SSH can't), and `~/.ssh/mq_minipc.pub` isn't in
+      its authorized_keys. Once it is: `ssh -i ~/.ssh/mq_minipc gruman@192.168.40.46`
 - [ ] user: approve the screenshots (fix sheet detail switch, link sheet "Linked automatically", Jazz 7ths)
 - [ ] next stage: watch the first re-analyses (`journalctl --user -u mqc-watch -f`): "fetched BTC-PL", "iReal charts titled like
       it", generator `mqc/vote+smooth+pl+beat_this`
