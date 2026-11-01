@@ -49,8 +49,9 @@ whole library re-analysed on the mini PC. Pop must not get worse (D-36).
   Nature as heard vs Jazz 7ths (landscape chart, alto lead sheet)
 
 ## Open
-- [ ] user: `pnpm ship` (web + Worker; the Worker must take `charts[]` before the mini PC uploads M12 timelines). The session's
-      deploy was refused by the auto-mode safety check
+- [ ] user: `pnpm ship` (web + Worker), so the phone links charts and shows the chord-detail switch. The Worker stores timelines
+      as sent, so `charts[]` survive either way and the order of deploy and re-analysis doesn't matter. The session's deploy
+      was refused by the auto-mode safety check
 - [ ] user/next: the mini PC must run this code before the re-analysis: `git pull`, `bash companion/linux/install.sh`
       (fetches the iReal corpus, rebuilds the bridge), `systemctl --user restart mqc-watch`; then
       `pnpm companion:linux requeue-all --before 2026-11-02` (33 tracks; each is played in full, ~4–6 h when Spotify is idle).
