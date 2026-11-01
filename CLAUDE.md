@@ -6,7 +6,7 @@ key changes, suggested scales) for practising piano and saxophone improvisation.
 ## Current stage
 
 **M12 built (jazz-ready charts, 2026-11-01):** the audit's fixes are in the companion and the app (smoothed chords, BTC-PL names,
-vamp-aware keys, iReal charts sent with each analysis and linked by the phone, per-track chord detail); web + Worker deployed.
+vamp-aware keys, iReal charts sent with each analysis and linked by the phone, per-track chord detail); pushed, not yet deployed.
 Before it, M11 put the companion on the Ubuntu mini PC. Read `handoffs/DECISIONS.md`, then `handoffs/M12-jazz-charts.md`; its
 Open list says how the mini PC gets M12 and the library is re-analysed.
 

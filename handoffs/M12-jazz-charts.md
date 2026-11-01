@@ -1,6 +1,6 @@
 # M12 · Jazz-ready charts (audit fixes)
 
-**Status:** built, tested, web + Worker deployed · 2026-11-01 · **Next:** mini PC update + library re-analysis, then M10's phone verdict
+**Status:** built, tested, pushed; deploy (`pnpm ship`) waiting on the user · 2026-11-01 · **Next:** deploy, mini PC update, library re-analysis
 **Commit:** see `git log` for "S12|M12:" (pushed to origin/main)
 
 ## Goal of this stage
@@ -49,6 +49,8 @@ whole library re-analysed on the mini PC. Pop must not get worse (D-36).
   Nature as heard vs Jazz 7ths (landscape chart, alto lead sheet)
 
 ## Open
+- [ ] user: `pnpm ship` (web + Worker; the Worker must take `charts[]` before the mini PC uploads M12 timelines). The session's
+      deploy was refused by the auto-mode safety check
 - [ ] user/next: the mini PC must run this code before the re-analysis: `git pull`, `bash companion/linux/install.sh`
       (fetches the iReal corpus, rebuilds the bridge), `systemctl --user restart mqc-watch`; then
       `pnpm companion:linux requeue-all --before 2026-11-02` (33 tracks; each is played in full, ~4–6 h when Spotify is idle).
