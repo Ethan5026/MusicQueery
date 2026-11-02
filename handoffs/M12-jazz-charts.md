@@ -1,6 +1,7 @@
 # M12 · Jazz-ready charts (audit fixes)
 
-**Status:** built, tested, pushed, deployed (Worker version 779c97fc) · 2026-11-01 · **Next:** mini PC update, library re-analysis
+**Status:** done: deployed (Worker 779c97fc), mini PC on M12 (8b29b9a), all 33 songs re-analysed and checked · 2026-11-02 ·
+**Next:** the user's call on P-09 / P-10, then M13 (a second chord namer, lv-chordia; see Open)
 **Commit:** see `git log` for "S12|M12:" (pushed to origin/main)
 
 ## Goal of this stage
@@ -17,6 +18,7 @@ whole library re-analysed on the mini PC. Pop must not get worse (D-36).
 - D-91 iReal charts in `timeline.charts`; the phone links jazz-side charts by itself; pop charts only offered
 - D-92 chord detail per track: Triads · As heard · Jazz 7ths
 - D-93 `mqc requeue-all`; "Bar n of N" with linked charts
+- D-94 production check on the mini PC (numbers match the lab) + three companion fixes; P-09, P-10 opened
 
 ## Built
 - `packages/theory/src/regions.ts` — `tonicPrior` (TONIC_PRIOR 1.5, floor 0.15), modal emission 1.2
@@ -35,6 +37,8 @@ whole library re-analysed on the mini PC. Pop must not get worse (D-36).
 - `companion/src/mqc/cli.py` — `requeue-all`; bakeoff shows `smooth` / `smooth+7`
 - `companion/scripts/m12_cache.py`, `m12_eval.py` — recogniser cache on the truth audio and the post-processing harness
 - `companion/linux/install.sh` — fetches the iReal corpus and builds the bridge
+- `companion/src/mqc/charts.py` — `same_song`, `base_title`, cache `lookups2` (D-94); `watch.py` — SIGTERM exit,
+  `leftover_capture` pause on Linux (D-94); tests in `test_pure.py`, `test_watch.py` (companion pytest 43)
 
 ## Verified
 - `scripts/m12_eval.py` (cache in `work/m12/`), human pop per beat, M3 vote → M12: root .838 → .864, majmin .840 → .871,
@@ -45,21 +49,32 @@ whole library re-analysed on the mini PC. Pop must not get worse (D-36).
   96 chords (was 128), schema valid, 16 s
 - `pnpm test` → 1177 passed; `pnpm e2e` → 38 passed (new: pop chart offered not linked; jazz chart links itself, unlink sticks;
   chord detail survives a reload); typecheck + eslint clean; companion `pytest` 40 passed, `ruff check` / `format --check` clean
+- Production (D-94), 11 truth songs, M11 store → M12 captured on the mini PC: misleading bars 33.1% → 26.1% (lab 25.4%),
+  7ths 43.7 → 55.4, Advanced lacking a chord tone 13.1 → 9.9; a deliberate mid-capture restart left no autoplay
 - Screenshots (scratchpad, shown to the user): Fly Me auto-linked (Chart, link sheet, fix sheet with the detail switch), Human
   Nature as heard vs Jazz 7ths (landscape chart, alto lead sheet)
 
 ## Open
 - [x] `pnpm ship` done 2026-11-01 (Worker version 779c97fc). On this laptop pnpm's cmd shell needs node first on PATH:
       `PATH="/c/nvm4w/nodejs:$PATH" pnpm ship`
-- [ ] user/next: the mini PC must run this code before the re-analysis: `git pull`, `bash companion/linux/install.sh`
-      (fetches the iReal corpus, rebuilds the bridge), `systemctl --user restart mqc-watch`; then
-      `pnpm companion:linux requeue-all --before 2026-11-02` (33 tracks; each is played in full, ~4–6 h when Spotify is idle).
-      Not done yet: the mini PC takes password logins only (BatchMode SSH can't), and `~/.ssh/mq_minipc.pub` isn't in
-      its authorized_keys. Once it is: `ssh -i ~/.ssh/mq_minipc gruman@192.168.40.46`
+- [x] mini PC on M12 (2026-11-01, ce77212): `git pull`, `install.sh`, `systemctl --user restart mqc-librespot mqc-watch`;
+      BTC-PL fetched there, iReal lookup checked (Fly Me → Jazz 1460, Let It Be → Pop 400). `requeue-all --before 2026-11-02`
+      queued all 33 + All for Leyna (failed at 18:58 UTC: `PUT /me/player/play` 404, librespot restarted since).
+      SSH there needs the default key AND the password: the user types it into a mintty window holding a ControlMaster,
+      then `ssh -o BatchMode=yes -o ControlPath=~/.ssh/cm-%C -O proxy gruman@192.168.40.46 '<cmd>'` (Git for Windows ssh
+      cannot open normal mux sessions). `pnpm companion:linux` now passes `--frozen` (it failed on the Windows-only wheel)
+- [x] re-analysis checked 2026-11-02 (D-94): 33/33 on `mqc/vote+smooth+pl+beat_this`; audit of the 11 truth songs matches
+      the lab; Zanzibar now ~146 bpm (was 296). Inbox added 29 new songs (MusicQueery playlist), analysed after the 33
+- [ ] user: P-09 (auto-link jump limit 0.22 for recordings: Mas Que Nada's right chart is refused at 0.192) and P-10 (Simple
+      shows the mode heard: Dorian / Mixolydian) — both in DECISIONS.md with the numbers
 - [ ] user: approve the screenshots (fix sheet detail switch, link sheet "Linked automatically", Jazz 7ths)
-- [ ] next stage: watch the first re-analyses (`journalctl --user -u mqc-watch -f`): "fetched BTC-PL", "iReal charts titled like
-      it", generator `mqc/vote+smooth+pl+beat_this`
-- [ ] next stage: portrait Lead sheet still shows ~2 bars (D-81, user decision); a chord look-ahead strip there was not built
+- [ ] M13 candidate (research idea, the one left with a real accuracy chance): lv-chordia (MIT, ISMIR 2019 large-vocabulary
+      model) as a second namer beside BTC-PL; score with `scripts/m12_eval.py` + the soloist audit, keep only if pop holds
+- [ ] seen, not fixed: It's a Man's Man's Man's World (live) is 6/4 at 136 bpm (eighths; truly a slow 12/8). `fix_double_time`
+      acts only ≥ 200 bpm; no truth to tune a lower rule on
+- [ ] Mas Que Nada: if the phone already opened it, it stored "no auto link" for this analysis (`for` = createdAt); after P-09
+      it links again only by hand or after a re-analysis
+- [ ] portrait Lead sheet still shows ~2 bars (D-81, user decision); a chord look-ahead strip there was not built
 - [ ] later: stems helped Mas Que Nada's 7ths only; a jazz-only use could be retried with more jazz truth
 - [ ] P-05 sections still open (allin1 not tried)
 
@@ -69,6 +84,7 @@ whole library re-analysed on the mini PC. Pop must not get worse (D-36).
 
 ## Next prompt
 ```
-Read CLAUDE.md, handoffs/DECISIONS.md and handoffs/M12-jazz-charts.md. Check the mini PC runs M12 (journalctl --user -u mqc-watch),
-then that the requeued library is being re-analysed; spot-check a few new timelines with the soloist audit or on the phone.
+Read CLAUDE.md, handoffs/DECISIONS.md and handoffs/M12-jazz-charts.md. Apply the user's answers on P-09 and P-10 (tests,
+screenshots for P-10, deploy), then start M13: lv-chordia as a second chord namer, measured with companion/scripts/m12_eval.py
+and the soloist audit; pop must not get worse (D-36).
 ```

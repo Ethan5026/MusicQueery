@@ -444,6 +444,16 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
   fixes, so a fix always shows as written.
 - **D-93** (M12) `mqc requeue-all [--before DATE] [--dry-run]` queues every stored analysis with `redo` for the watcher. A linked
   chart numbers bars by their place in its form, so "Bar n of N" takes the largest bar number (was "Bar 15 of 13").
+- **D-94** (M12, production check) The mini PC ran M12 on all 33 stored songs (2026-11-02, `requeue-all`). The soloist audit on
+  the 11 truth songs, M11 store → M12 captured on the mini PC (lab run on the truth audio in brackets): root 82.5 → 84.9
+  (84.9), 7ths 43.7 → 55.4 (57.3), bars with a misleading chord 33.1% → 26.1% (25.4%), Advanced scale lacking a chord tone
+  13.1 → 9.9 (9.3), Integrated 14.4 → 10.8 (10.9), Simple 25.4 → 28.7 (27.7): production matches the lab. 13 of 33 songs
+  brought iReal charts; Ipanema and Fly Me link themselves, a same-title chart of another song ("Lover") is refused, 9 Pop
+  400 charts are offered. Fixed on the way: the Chordonomicon fallback search keeps only other releases of the same song
+  (`same_song`; it had returned the album The Stranger's Just the Way You Are, 76%; cache table `lookups2`); a stopped
+  watcher exits on SIGTERM so the capture pauses the player, and on Linux a new watcher pauses the capture device if it is
+  still playing (a mid-track restart had left librespot on Spotify autoplay for 35 min, queue stalled, plays in the
+  history); `pnpm companion:linux` passes `--frozen`.
 
 ## Pending
 
@@ -459,3 +469,13 @@ Append only. To reverse a decision, add a new one that supersedes it (e.g. "D-09
 - **P-08** (M10, user) Loose end: the melody as its own page, analysed from a recording the PC captures (WASAPI loopback or an
   API source), never the phone's mic. The data already exists (D-76, D-77: `melody[]`, `requeue-melody`, `melody-saved`). Off
   every screen until that page is designed.
+- **P-09** (M12) Auto-link jump limit for recordings. D-68 trusts a chart at ≤ 0.18 jumps a bar. On analysed recordings the
+  right same-title charts made 0.000–0.134 (pop, jazz) but Brazilian ones 0.155–0.192 (Ipanema, Mas Que Nada: long intros
+  and vamps), so Mas Que Nada's M12 capture (agreement 0.82, 0.192) is refused and can't even be linked by hand. Alignment
+  alone barely tells songs apart (357 jazz-side charts × 34 recordings: 4.0% of other songs' charts pass today, 5.5% at
+  0.20; 12-bar blues fits almost anything); the title match is the real guard. Proposal: 0.22 for `source: analysed`,
+  live stays 0.18. Needs the user's OK (changes D-68).
+- **P-10** (M12) Simple mode shows major or natural minor (M4, user design). With D-87's keys right but modal it misses the
+  chord's tones more often (Simple 25.4 → 28.7): It's Too Late's Am7–D6 verse is "A minor" (A Aeolian lacks D6's F♯; it
+  was G major before), Higher Ground's E♭7(♯9) vamp "E♭ major" (lacks D♭). Option: Simple names and shows the mode the
+  region's chords use (A Dorian, E♭ Mixolydian), from `keyMode`'s neighbour swaps. Needs the user's call.
