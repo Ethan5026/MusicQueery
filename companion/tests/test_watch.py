@@ -50,3 +50,13 @@ def test_the_queue_is_listed_sparingly():
     assert should_list(True, work, 0)  # idle with work: every loop
     assert not should_list(True, [], 179) and should_list(True, [], 180)  # idle, nothing to do: every 3 min
     assert not should_list(False, work, 599) and should_list(False, work, 600)  # Spotify playing: every 10 min
+
+
+def test_a_new_watcher_pauses_only_the_capture_player_left_playing():
+    from mqc.watch import leftover_capture
+
+    assert leftover_capture(True, "MusicQueery server", "MusicQueery server")  # autoplay after a mid-track stop
+    assert leftover_capture(True, "musicqueery SERVER", "MusicQueery server")
+    assert not leftover_capture(False, "MusicQueery server", "MusicQueery server")  # paused: nothing to do
+    assert not leftover_capture(True, "Fire TV", "MusicQueery server")  # the user listening elsewhere
+    assert not leftover_capture(True, None, "MusicQueery server")

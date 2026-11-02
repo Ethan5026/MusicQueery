@@ -14,6 +14,8 @@ sparingly (`should_list`).
 
 from __future__ import annotations
 
+import signal
+import sys
 import time
 from collections.abc import Callable
 
@@ -67,17 +69,34 @@ def should_list(ready: bool, queue: list[dict], since_s: float) -> bool:
     return since_s >= 600
 
 
+def leftover_capture(playing: bool, device_name: str | None, capture_device: str) -> bool:
+    """The dedicated capture player (librespot on Linux) still playing when a watcher starts: the last watcher stopped
+    mid-track, and Spotify's autoplay keeps it going, so Spotify never looks idle and the queue never moves (M12)."""
+    return playing and bool(device_name) and device_name.lower() == capture_device.lower()
+
+
 def watch(
     idle_minutes: float = 10, interval_s: float = 60, once: bool = False, inbox_minutes: float = 10, log=print
 ) -> int:
     import httpx
 
+    from .config import LINUX_DEVICE_NAME, WINDOWS
     from .inbox import Inbox
     from .pipeline import DEFAULT_RECOGNISER, analyse_track
     from .spotify import Spotify, SpotifyError
 
     sp, store = Spotify(), Store()
     idle = IdleTracker(idle_minutes * 60)
+    # systemd stops the service with SIGTERM: exit normally, so a capture's `finally` pauses the player (M12)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    if not WINDOWS:  # on Windows the capture device is the user's own Spotify app: never pause it unasked
+        try:
+            st = sp.player()
+            if st and leftover_capture(st.is_playing, st.device_name, LINUX_DEVICE_NAME):
+                sp.pause(st.device_id)
+                log(f"paused {st.device_name}: it was still playing after a watcher stopped mid-track")
+        except (SpotifyError, httpx.HTTPError) as e:
+            log(f"watch: {e}")
     pid = store.s.inbox_playlist
     inbox = Inbox(pid, sp, store, store.s.inbox_name, inbox_minutes * 60, log=log) if pid else None
     done = failed = 0
