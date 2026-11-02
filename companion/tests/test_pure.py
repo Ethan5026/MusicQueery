@@ -154,3 +154,54 @@ def test_fix_double_time():
     # 4/4 at a real fast tempo stays
     b = A.Beats(np.arange(0, 32 * 0.25, 0.25), np.arange(0, 32 * 0.25, 1.0))
     assert A.fix_double_time(b) is b
+
+
+def test_same_song_drops_versions_only():
+    from mqc.charts import same_song
+
+    assert same_song("Lover (Live)", "Lover")
+    assert same_song("Let It Be - Remastered 2009", "let it be")
+    assert same_song("Águas de Março", "Aguas De Março") is False  # accents differ: a different spelling, not dropped
+    assert same_song("Águas de Março", "águas de março")
+    assert not same_song("Just the Way You Are", "The Stranger")
+    assert not same_song("(Live)", "(Live)")  # nothing left to compare
+
+
+def test_chart_lookup_keeps_other_releases_of_the_same_song_only(tmp_path):
+    import sqlite3
+
+    from mqc import charts as C
+
+    db = tmp_path / "c.sqlite"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE charts (song_id TEXT, artist_id TEXT, row_id TEXT, genres TEXT, chords TEXT)")
+    con.executemany(
+        "INSERT INTO charts VALUES (?,?,?,?,?)",
+        [("live", "a", "1", "", "<verse_1> C"), ("jtwya", "a", "2", "", "<verse_1> D")],
+    )
+    con.commit()
+    con.close()
+
+    class Sp:
+        def track(self, tid):
+            return {"name": "The Stranger - Remastered", "artists": [{"name": "Billy Joel"}]}
+
+        def call(self, method, path, params):
+            class R:
+                status_code = 200
+
+                def json(self):
+                    # Spotify's search also returns the album's other tracks
+                    return {
+                        "tracks": {
+                            "items": [
+                                {"id": "live", "name": "The Stranger (Live)"},
+                                {"id": "jtwya", "name": "Just the Way You Are"},
+                            ]
+                        }
+                    }
+
+            return R()
+
+    assert [c.row_id for c in C.lookup(Sp(), "orig", db)] == ["1"]
+    assert [c.row_id for c in C.lookup(None, "orig", db)] == ["1"]  # cached: no second search

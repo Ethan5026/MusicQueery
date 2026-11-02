@@ -55,12 +55,31 @@ def build_index(csv_path: Path = CSV_PATH, db_path: Path = DB_PATH, log=print) -
         con.executemany("INSERT INTO charts VALUES (?,?,?,?,?)", batch)
         n += len(batch)
     con.execute("CREATE INDEX by_song ON charts(song_id)")
-    con.execute("CREATE TABLE lookups (track_id TEXT PRIMARY KEY, song_ids TEXT)")
+    con.execute(LOOKUPS)
     con.commit()
     con.close()
     os.replace(tmp, db_path)
     log(f"indexed {n} charts with Spotify ids → {db_path}")
     return n
+
+
+# Spotify search results cached per track. `lookups2` (M12) holds only results titled like the track; the M3 table
+# `lookups` also kept other songs and is no longer read.
+LOOKUPS = "CREATE TABLE IF NOT EXISTS lookups2 (track_id TEXT PRIMARY KEY, song_ids TEXT)"
+
+
+def base_title(name: str) -> str:
+    """The song without its version: "Let It Be - Remastered 2009" → "Let It Be", "Lover (Live)" → "Lover"."""
+    return re.sub(r"\s*[-(\[].*$", "", name)
+
+
+def same_song(a: str, b: str) -> bool:
+    """Two Spotify track names of the same song: equal once versions, case and punctuation are dropped."""
+
+    def norm(s: str) -> str:
+        return re.sub(r"[\W_]+", " ", base_title(s).casefold()).strip()
+
+    return norm(a) == norm(b) != ""
 
 
 @dataclass
@@ -80,15 +99,17 @@ def lookup(sp, track_id: str, db_path: Path = DB_PATH) -> list[Chart]:
         rows = con.execute("SELECT row_id, song_id, chords FROM charts WHERE song_id = ?", (track_id,)).fetchall()
         if rows:
             return [Chart(*r) for r in rows]
-        cached = con.execute("SELECT song_ids FROM lookups WHERE track_id = ?", (track_id,)).fetchone()
+        con.execute(LOOKUPS)
+        cached = con.execute("SELECT song_ids FROM lookups2 WHERE track_id = ?", (track_id,)).fetchone()
         if cached is None:
             t = sp.track(track_id)
-            title = re.sub(r"\s*[-(\[].*$", "", t["name"])
+            title = base_title(t["name"])
             q = f"track:{title} artist:{t['artists'][0]['name']}"
             r = sp.call("GET", "/search", params={"q": q, "type": "track", "limit": 10})
-            ids = [x["id"] for x in r.json()["tracks"]["items"]] if r.status_code == 200 else []
-            ids = [i for i in ids if i != track_id]
-            con.execute("INSERT OR REPLACE INTO lookups VALUES (?, ?)", (track_id, ",".join(ids)))
+            items = r.json()["tracks"]["items"] if r.status_code == 200 else []
+            # the search also returns other songs (an album named like the track: "The Stranger" → Just the Way You Are)
+            ids = [x["id"] for x in items if x["id"] != track_id and same_song(x["name"], t["name"])]
+            con.execute("INSERT OR REPLACE INTO lookups2 VALUES (?, ?)", (track_id, ",".join(ids)))
             con.commit()
         else:
             ids = [i for i in cached[0].split(",") if i]
